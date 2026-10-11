@@ -1,6 +1,6 @@
 # laya-guard — a free local guardrail for AI coding agents
 
-[![ci](https://github.com/ayaan0209/laya-guard/actions/workflows/ci.yml/badge.svg)](https://github.com/ayaan0209/laya-guard/actions/workflows/ci.yml)
+[![ci](https://github.com/scs0209/laya-guard/actions/workflows/ci.yml/badge.svg)](https://github.com/scs0209/laya-guard/actions/workflows/ci.yml)
 [![license: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![python: >=3.10](https://img.shields.io/badge/python-%3E%3D3.10-blue.svg)](pyproject.toml)
 

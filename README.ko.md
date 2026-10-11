@@ -1,6 +1,6 @@
 # laya-guard — AI 코딩 에이전트용 무료 로컬 가드레일
 
-[![ci](https://github.com/ayaan0209/laya-guard/actions/workflows/ci.yml/badge.svg)](https://github.com/ayaan0209/laya-guard/actions/workflows/ci.yml)
+[![ci](https://github.com/scs0209/laya-guard/actions/workflows/ci.yml/badge.svg)](https://github.com/scs0209/laya-guard/actions/workflows/ci.yml)
 [![license: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 > **매 `tool_call`을 노트북에서 ~0.1초에 심판. 건당 과금 없음.**
