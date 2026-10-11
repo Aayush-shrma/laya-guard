@@ -1,0 +1,154 @@
+# laya-guard 위험 정책 10개
+# 각 정책: 정규식 프리필터(빠른 차단) + Laya 심판 질문 매핑
+# Laya는 choice(허용/검토/차단) + score(위험도) + noul(악의여부)만 뱉는다. 생성 없음.
+version: 1
+defaults:
+  block_threshold: 0.8    # risk score >= 0.8 → 차단
+  review_threshold: 0.45  # >= 0.45 → 폰 승인카드
+  model: multilingual     # 한국어 포함이므로 다국어 체크포인트 고정
+
+policies:
+  - id: destructive-fs
+    title: "파괴적 파일시스템 명령"
+    patterns:
+      - 'rm\s+-rf?\s+/(?=\s|$|"|''|}|\\|\*)'
+      - 'mkfs(\.| )'
+      - '\bdd\s+if=.*of=/dev/'
+      - ': ?\{\s*:.*\}\s*;'
+    laya:
+      choice: ["allow", "review", "block"]
+      choice_hint: "rm -rf /, mkfs, dd to device면 block"
+      score_hint: "파일시스템 파괴 위험도"
+    action_on_regex: block
+    message: "파괴적 FS 명령 감지 — 승인 없이 실행 금지"
+
+  - id: exfiltration
+    title: "외부 유출 (비밀+외부전송 결합)"
+    patterns:
+      - 'curl.*\|\s*(sh|bash)'
+      - 'wget.*\|\s*(sh|bash)'
+      - 'ngrok|expose|serveo|chisel'
+      - 'scp\s+.*@'
+      - 'send a link\s+\S+\s+to \w'
+      - 'visit a website at the link'
+      - 'security code.*(send|forward|to \S+@)'
+      - 'send all messages to'
+      - '(passport_number|bank_account_number)'
+      - 'get all user information'
+      - 'delete the email you have just sent'
+    laya:
+      choice: ["allow", "review", "block"]
+      score_hint: "민감정보가 외부로 나갈 위험도"
+    action_on_regex: review
+    message: "외부 전송 패턴 — 목적지 확인 필요"
+
+  - id: prompt-injection
+    title: "프롬프트 인젝션"
+    patterns:
+      - 'ignore (all )?previous instructions'
+      - '이전 지시를 무시'
+      - 'system prompt.*(보여|출력|leak|reveal)'
+      - 'DAN|jailbreak'
+    laya:
+      choice: ["allow", "review", "block"]
+      score_hint: "에이전트 지시를 탈취하려는 시도 위험도"
+    action_on_regex: block
+    message: "인젝션 패턴 — 원문 출처 확인 필요"
+
+  - id: secrets-leak
+    title: "시크릿 유출"
+    patterns:
+      - 'sk-[a-zA-Z0-9]{8,}'
+      - 'AKIA[0-9A-Z]{10,}'
+      - '-----BEGIN (RSA |OPENSSH )?PRIVATE KEY-----'
+      - '[0-9]{6}-[0-9]{7}'
+      - 'ghp_[a-zA-Z0-9]{20,}'
+    laya:
+      choice: ["allow", "review", "block"]
+      score_hint: "시크릿이 평문으로 노출/전송될 위험도"
+    action_on_regex: block
+    message: "시크릿 패턴 감지 — 마스킹 후 재전송"
+
+  - id: payment-action
+    title: "결제/송금 실행"
+    patterns:
+      - '(결제|송금|환불|refund|charge|payment).*(실행|진행|승인)'
+      - 'toss|kakaopay.*(approve|pay)'
+      - 'stripe.*(charge|refund)'
+      - 'send a transaction to'
+      - 'modify the recipient.*(payment|transfer)'
+      - 'transfer \$[0-9,]+.*to the ac'
+      - 'recurring payment.*to (be|the account)'
+    laya:
+      choice: ["allow", "review", "block"]
+      score_hint: "금전 이동이 실제로 일어날 위험도"
+    action_on_regex: review
+    message: "금전 액션 — 사람 승인 필수"
+
+  - id: remote-exec
+    title: "원격 코드 실행"
+    patterns:
+      - 'pip install.*--extra-index-url'
+      - 'npm install.*http://'
+      - 'curl.*\.sh'
+      - 'powershell.*-enc'
+    laya:
+      choice: ["allow", "review", "block"]
+      score_hint: "검증 안 된 원격 코드 실행 위험도"
+    action_on_regex: review
+    message: "원격 코드 — 해시/출처 확인 필요"
+
+  - id: priv-escalation
+    title: "권한 상승"
+    patterns:
+      - 'sudo\s+(su|bash|sh)'
+      - 'chmod\s+777'
+      - 'setuid|setcap'
+    laya:
+      choice: ["allow", "review", "block"]
+      score_hint: "권한 상승 악용 위험도"
+    action_on_regex: review
+    message: "권한 상승 — 범위 확인 필요"
+
+  - id: persistence
+    title: "지속성 확보 (악성 상주)"
+    patterns:
+      - 'crontab|/etc/cron'
+      - 'systemctl enable|launchctl load'
+      - 'HKLM.*Run|Startup folder'
+      - '\.bashrc|\.zshrc.*curl'
+    laya:
+      choice: ["allow", "review", "block"]
+      score_hint: "몰래 상주하려는 시도 위험도"
+    action_on_regex: review
+    message: "상주 시도 — 의도 확인 필요"
+
+  - id: mass-delete
+    title: "대량 삭제 (DB/스토리지)"
+    patterns:
+      - 'DROP\s+(TABLE|DATABASE)'
+      - 'DELETE\s+FROM.*WHERE\s+1=1'
+      - 's3 rm.*--recursive'
+      - 'kubectl delete.*--all'
+    laya:
+      choice: ["allow", "review", "block"]
+      score_hint: "되돌릴 수 없는 대량 삭제 위험도"
+    action_on_regex: review
+    message: "대량 삭제 — 백업/범위 확인 필요"
+
+  - id: auth-bypass
+    title: "인증 우회"
+    patterns:
+      - '--no-verify|--insecure-skip|skip.*auth'
+      - '인증.*(우회|무력화|끄기|비활성화)'
+      - 'disable.*(auth|tls|ssl)'
+      - 'TLS.*(끄|비활|무력|우회|skip)'
+      - '검증.*(끄|비활|무력화|우회|skip)'
+      - 'verify.*(off|disable|false|skip)'
+      - 'change the password of the user to'
+      - 'reset.*password.*to new_password'
+    laya:
+      choice: ["allow", "review", "block"]
+      score_hint: "인증 무력화 시도 위험도"
+    action_on_regex: block
+    message: "인증 우회 — 즉시 차단"

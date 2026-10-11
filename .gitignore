@@ -1,0 +1,18 @@
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+dist/
+build/
+
+# huggingface / model caches (per-user, never commit)
+# (repo code downloads checkpoints to the HF cache at runtime)
+
+# eval artifacts (reproducible via scripts; keep the committed baseline only)
+# eval/agentdojo_results.json is intentionally tracked as the baseline.
+
+# local tooling
+.freebuff/
+.DS_Store

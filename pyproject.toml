@@ -1,0 +1,22 @@
+[project]
+name = "laya-guard"
+version = "0.1.0"
+description = "OpenClaw/OpenCode tool_call guardrail - every call judged locally by Laya (free), not billed per decision like Jev"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+dependencies = [
+  "laya",
+  "pyyaml",
+  "fastapi",
+  "uvicorn",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[project.scripts]
+laya-guard = "laya_guard.cli:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
