@@ -61,6 +61,20 @@ agent tool_call
 Measured latency: **~85–90ms per judgment** on a laptop CPU (Oct 2026, real model,
 warmed up). Regex hits return instantly without invoking the model.
 
+## Supported agents
+
+| Agent | Integration | `review` becomes |
+|---|---|---|
+| Claude Code | [PreToolUse hook](guard-hook.sh) | passes through (exit 0) |
+| OpenCode | [`tool.execute.before` plugin](integrations/opencode/laya-guard.ts) | allow + stderr warning |
+| Codex CLI | [`PreToolUse` hook](integrations/codex/) | allow + stderr note (no ask lane) |
+| Cursor | [`beforeShellExecution` hook](integrations/cursor/) | `ask` (human approval) |
+| Kilo Code | [`tool.execute.before` plugin](integrations/kilo/laya-guard.ts) | allow + stderr warning |
+
+Setup per agent: [integrations/](integrations/). Only Cursor routes `review`
+to a human; elsewhere `review` warns and passes — use native `permission`/
+`allowlist` rules alongside if you want hard asks.
+
 ## Use cases
 
 Ready-made adapters live in [integrations/](integrations/): Claude Code,

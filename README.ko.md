@@ -59,6 +59,20 @@ curl -X POST localhost:8787/guard -H 'Content-Type: application/json' \
 실측 지연: 노트북 CPU에서 **판정당 ~85–90ms** (2026-10, 실전 모델 웜업 후).
 정규식 적중은 모델 호출 없이 즉시 반환됩니다.
 
+## 지원 에이전트
+
+| 에이전트 | 연동 | `review` 처리 |
+|---|---|---|
+| Claude Code | [PreToolUse 훅](guard-hook.sh) | 통과 (exit 0) |
+| OpenCode | [`tool.execute.before` 플러그인](integrations/opencode/laya-guard.ts) | allow + stderr 경고 |
+| Codex CLI | [`PreToolUse` 훅](integrations/codex/) | allow + stderr 안내 (ask 불가) |
+| Cursor | [`beforeShellExecution` 훅](integrations/cursor/) | `ask` (사람 승인) |
+| Kilo Code | [`tool.execute.before` 플러그인](integrations/kilo/laya-guard.ts) | allow + stderr 경고 |
+
+에이전트별 설치법: [integrations/](integrations/). `review`를 사람에게 넘기는
+건 Cursor뿐입니다. 나머지는 경고 후 통과하니, 강제 승인이 필요하면 각 도구의
+`permission`/`allowlist` 규칙을 함께 쓰세요.
+
 ## 사용처
 
 ### 1. Claude Code 가드 (PreToolUse 훅)
