@@ -6,6 +6,8 @@
 
 > **Every `tool_call` judged on your laptop in ~0.1s. No per-decision billing.**
 
+![demo](demo/demo.gif)
+
 AI coding agents run shell commands, move money, and ship data outward. Each step
 deserves a safety check — but per-decision API pricing makes per-step judging
 prohibitively expensive. laya-guard judges every call **locally** with a small
