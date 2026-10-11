@@ -1,6 +1,6 @@
 [project]
 name = "laya-guardrail"
-version = "0.1.0"
+version = "0.2.0"
 description = "OpenClaw/OpenCode tool_call guardrail - every call judged locally by Laya (free), not billed per decision like Jev"
 readme = "README.md"
 license = { text = "MIT" }
