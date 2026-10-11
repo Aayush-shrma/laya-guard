@@ -63,6 +63,9 @@ warmed up). Regex hits return instantly without invoking the model.
 
 ## Use cases
 
+Ready-made adapters live in [integrations/](integrations/): Claude Code,
+OpenCode, Codex CLI, Cursor, and Kilo Code.
+
 ### 1. Guard Claude Code (PreToolUse hook)
 
 Register [guard-hook.sh](guard-hook.sh) as a PreToolUse hook. It reads the tool

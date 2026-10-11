@@ -1,0 +1,13 @@
+# Append to ~/.codex/config.toml (project hooks also possible for trusted projects).
+# Docs: https://developers.openai.com/codex/hooks
+[features]
+hooks = true
+
+[[hooks.PreToolUse]]
+matcher = "^Bash$"
+
+[[hooks.PreToolUse.hooks]]
+type = "command"
+command = "python3 ~/.codex/hooks/check_command.py"
+timeout = 30
+statusMessage = "laya-guard: checking shell command"

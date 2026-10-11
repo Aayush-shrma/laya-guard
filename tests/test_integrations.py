@@ -1,0 +1,123 @@
+"""Contract tests for agent hook scripts (codex/cursor).
+
+Runs each script as a subprocess against a stub guard server, per the
+documented hook contracts. No model, no network beyond localhost.
+"""
+import json
+import os
+import subprocess
+import sys
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+CODEX = ROOT / "integrations" / "codex" / "check_command.py"
+CURSOR = ROOT / "integrations" / "cursor" / "laya-guard.py"
+
+
+class StubHandler(BaseHTTPRequestHandler):
+    def do_POST(self):
+        body = self.rfile.read(int(self.headers.get("Content-Length", 0))).decode()
+        if "BLOCKME" in body:
+            v = {"action": "block", "risk": 0.92, "policy_id": "t", "reason": "no"}
+        elif "REVIEWME" in body:
+            v = {"action": "review", "risk": 0.6, "policy_id": "t", "reason": "maybe"}
+        else:
+            v = {"action": "allow", "risk": 0.1, "policy_id": "general", "reason": "ok"}
+        data = json.dumps(v).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def log_message(self, *a):
+        pass
+
+
+def _stub_url():
+    srv = HTTPServer(("127.0.0.1", 0), StubHandler)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    return srv, f"http://127.0.0.1:{srv.server_port}/guard"
+
+
+def _run(script: Path, payload: str, url: str) -> subprocess.CompletedProcess:
+    env = dict(os.environ, LAYA_GUARD_URL=url)
+    return subprocess.run([sys.executable, str(script)], input=payload,
+                          capture_output=True, text=True, env=env, timeout=60)
+
+
+def test_codex_block_denies():
+    srv, url = _stub_url()
+    try:
+        p = _run(CODEX, json.dumps({"tool_input": {"command": "BLOCKME please"}}), url)
+        assert p.returncode == 0
+        out = json.loads(p.stdout)
+        assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
+        assert out["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
+    finally:
+        srv.shutdown()
+
+
+def test_codex_allow_and_review_pass_silently():
+    srv, url = _stub_url()
+    try:
+        p = _run(CODEX, json.dumps({"tool_input": {"command": "ls"}}), url)
+        assert p.returncode == 0 and p.stdout.strip() == ""
+        p = _run(CODEX, json.dumps({"tool_input": {"command": "REVIEWME x"}}), url)
+        assert p.returncode == 0 and p.stdout.strip() == ""
+        assert "review" in p.stderr
+    finally:
+        srv.shutdown()
+
+
+def test_codex_fail_open():
+    # guard down + garbage input -> exit 0, no deny
+    p = _run(CODEX, json.dumps({"tool_input": {"command": "x"}}),
+             "http://127.0.0.1:1/none")
+    assert p.returncode == 0 and "deny" not in p.stdout
+    p = _run(CODEX, "not json{{{", "http://127.0.0.1:1/none")
+    assert p.returncode == 0
+
+
+def test_cursor_block_exit2():
+    srv, url = _stub_url()
+    try:
+        p = _run(CURSOR, json.dumps({"command": "BLOCKME please"}), url)
+        assert p.returncode == 2
+        assert json.loads(p.stdout)["permission"] == "deny"
+    finally:
+        srv.shutdown()
+
+
+def test_cursor_review_asks_allow_silent():
+    srv, url = _stub_url()
+    try:
+        p = _run(CURSOR, json.dumps({"command": "REVIEWME x"}), url)
+        assert p.returncode == 0
+        assert json.loads(p.stdout)["permission"] == "ask"
+        p = _run(CURSOR, json.dumps({"command": "ls"}), url)
+        assert p.returncode == 0 and p.stdout.strip() == ""
+    finally:
+        srv.shutdown()
+
+
+def test_cursor_fail_open():
+    p = _run(CURSOR, json.dumps({"command": "x"}), "http://127.0.0.1:1/none")
+    assert p.returncode == 0 and p.stdout.strip() == ""
+    p = _run(CURSOR, "", "http://127.0.0.1:1/none")
+    assert p.returncode == 0
+
+
+def test_config_files_parse():
+    assert json.loads((ROOT / "integrations" / "cursor" / "hooks.json").read_text())["version"] == 1
+    try:
+        import tomllib
+    except ImportError:
+        pytest = __import__("pytest")
+        pytest.skip("tomllib needs Python 3.11+")
+    toml_text = (ROOT / "integrations" / "codex" / "config-snippet.toml").read_text()
+    d = tomllib.loads(toml_text)
+    assert d["features"]["hooks"] is True
+    assert d["hooks"]["PreToolUse"][0]["matcher"] == "^Bash$"
