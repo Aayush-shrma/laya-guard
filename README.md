@@ -6,13 +6,17 @@
 [![license: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![python: >=3.10](https://img.shields.io/badge/python-%3E%3D3.10-blue.svg)](pyproject.toml)
 
+<p align="center">
+  <strong>English</strong> · <a href="README.ko.md">한국어</a>
+</p>
+
 > **Every `tool_call` judged on your laptop in ~0.1s. No per-decision billing.**
 
-**Demo (English):**
-![demo in English](demo/demo_en.gif)
+**Demo EN:**
+<img src="demo/demo_en.gif" width="750" alt="demo in English">
 
-**Demo (한국어):**
-![demo in Korean](demo/demo.gif)
+**Demo KO:**
+<img src="demo/demo.gif" width="750" alt="demo in Korean">
 
 AI coding agents run shell commands, move money, and ship data outward. Each step
 deserves a safety check — but per-decision API pricing makes per-step judging

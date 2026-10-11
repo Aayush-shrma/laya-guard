@@ -5,13 +5,17 @@
 [![ci](https://github.com/scs0209/laya-guard/actions/workflows/ci.yml/badge.svg)](https://github.com/scs0209/laya-guard/actions/workflows/ci.yml)
 [![license: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
+<p align="center">
+  <a href="README.md">English</a> · <strong>한국어</strong>
+</p>
+
 > **매 `tool_call`을 노트북에서 ~0.1초에 심판. 건당 과금 없음.**
 
-**데모 (한국어):**
-![한국어 데모](demo/demo.gif)
+**Demo KO:**
+<img src="demo/demo.gif" width="750" alt="한국어 데모">
 
-**Demo (English):**
-![English demo](demo/demo_en.gif)
+**Demo EN:**
+<img src="demo/demo_en.gif" width="750" alt="English demo">
 
 AI 코딩 에이전트는 셸을 실행하고, 돈을 움직이고, 데이터를 외부로 보냅니다. 매 스텝마다
 검사해야 하지만 건당 과금 API로는 매 호출 검사가 비현실적입니다. laya-guard는 소형
