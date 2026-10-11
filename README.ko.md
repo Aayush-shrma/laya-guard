@@ -59,11 +59,50 @@ curl -X POST localhost:8787/guard -H 'Content-Type: application/json' \
 실측 지연: 노트북 CPU에서 **판정당 ~85–90ms** (2026-10, 실전 모델 웜업 후).
 정규식 적중은 모델 호출 없이 즉시 반환됩니다.
 
-## Claude Code에 연결
+## 사용처
 
-[guard-hook.sh](guard-hook.sh)는 PreToolUse 훅으로, 매 tool 호출을 로컬 서버에 POST하고
-`block`이면 exit 2로 실행을 취소합니다. 서버에 닿지 않으면 fail-open(`exit 0`)입니다.
+### 1. Claude Code 가드 (PreToolUse 훅)
+
+[guard-hook.sh](guard-hook.sh)를 PreToolUse 훅으로 등록하세요. tool 페이로드를
+stdin으로 읽어 로컬 서버에 POST하고, `block`이면 exit 2로 해당 실행을 취소합니다.
+`review`·`allow`는 exit 0으로 통과합니다. 서버에 닿지 않으면 fail-open(`exit 0`)입니다.
 [한계](#한계)를 먼저 읽어주세요.
+
+### 2. 아무 에이전트 루프 가드 (HTTP)
+
+매 스텝 HTTP 호출이 되는 프레임워크(OpenClaw, OpenCode, LangChain/LlamaIndex
+루프, 직접 만든 하네스)는 tool 실행을 이렇게 막을 수 있습니다:
+
+```python
+import requests
+
+def guard(tool_call: str, source: str = "tool") -> None:
+    v = requests.post("http://localhost:8787/guard",
+                      json={"tool_call": tool_call, "source": source},
+                      timeout=60).json()
+    if v["action"] == "block":
+        raise RuntimeError(f"blocked by {v['policy_id']}: {v['reason']}")
+    if v["action"] == "review":
+        ask_human(tool_call)  # 승인 단계 연결
+```
+
+도구 결과물에서 나온 호출은 `source="email"`/`"web"`/`"tool"`로 보내면 임계값이
+강화됩니다. 간접 인젝션을 막는 장치가 바로 이것입니다.
+
+### 3. 명령 묶음 감사 (CLI)
+
+```bash
+while IFS= read -r cmd; do
+  laya-guard check "$cmd" || echo "BLOCKED: $cmd"
+done < commands.txt
+```
+
+(`check`는 block이면 exit 2라 `||`/`&&`·`xargs`와 조합됩니다.)
+
+### 4. 자동화 게이트 (한국어 셋)
+
+CI가 이미 이렇게 돕니다. `eval/run_eval.py --min-acc 1.0`은 판정 정확도가 깨지면
+빌드를 실패시킵니다. 정책 수정 때도 로컬에서 같은 명령으로 검증하세요.
 
 ## 벤치마크 (재현 가능, 좋은 것만 골라내지 않음)
 

@@ -61,11 +61,51 @@ agent tool_call
 Measured latency: **~85–90ms per judgment** on a laptop CPU (Oct 2026, real model,
 warmed up). Regex hits return instantly without invoking the model.
 
-## Wire it into Claude Code
+## Use cases
 
-`guard-hook.sh` is a PreToolUse hook: it POSTs each tool call to the local server
-and exits 2 (cancelling execution) on `block`. If the server is unreachable it
-fails open (`exit 0`) — see [Limitations](#limitations).
+### 1. Guard Claude Code (PreToolUse hook)
+
+Register [guard-hook.sh](guard-hook.sh) as a PreToolUse hook. It reads the tool
+payload from stdin, POSTs it to the local server, and exits 2 on `block`
+(cancelling that run) — `review` and `allow` pass through with exit 0.
+If the server is unreachable it fails open (`exit 0`) — see
+[Limitations](#limitations).
+
+### 2. Guard any agent loop (HTTP)
+
+Any framework that can make an HTTP call per step — OpenClaw, OpenCode,
+a LangChain/LlamaIndex loop, your own harness — can gate tool execution:
+
+```python
+import requests
+
+def guard(tool_call: str, source: str = "tool") -> None:
+    v = requests.post("http://localhost:8787/guard",
+                      json={"tool_call": tool_call, "source": source},
+                      timeout=60).json()
+    if v["action"] == "block":
+        raise RuntimeError(f"blocked by {v['policy_id']}: {v['reason']}")
+    if v["action"] == "review":
+        ask_human(tool_call)  # your approval step
+```
+
+Use `source="email"`/`"web"`/`"tool"` for tool-output-derived calls to get
+stricter thresholds — this is what stops indirect injections.
+
+### 3. Audit a batch of commands (CLI)
+
+```bash
+while IFS= read -r cmd; do
+  laya-guard check "$cmd" || echo "BLOCKED: $cmd"
+done < commands.txt
+```
+
+(`check` exits 2 on block, so it composes with `||`/`&&` and `xargs`.)
+
+### 4. Gate automation on the Korean set
+
+CI already does this: `eval/run_eval.py --min-acc 1.0` fails the build if
+judgment accuracy regresses. Same command gates policy edits locally.
 
 ## Benchmarks (reproducible, not cherry-picked)
 
