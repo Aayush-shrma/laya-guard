@@ -1,17 +1,21 @@
 [project]
 name = "laya-guardrail"
-version = "0.2.0"
-description = "OpenClaw/OpenCode tool_call guardrail - every call judged locally by Laya (free), not billed per decision like Jev"
+version = "0.2.1"
+description = "Free local guardrail for AI coding agents: every tool_call judged on-device (regex + Laya model) as allow / review / block"
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.10"
 authors = [{ name = "scs0209" }]
-urls = { Homepage = "https://github.com/scs0209/laya-guard" }
+keywords = ["guardrail", "ai-agents", "llm-security", "prompt-injection", "claude-code", "tool-calling"]
 classifiers = [
   "Development Status :: 4 - Beta",
   "Intended Audience :: Developers",
   "License :: OSI Approved :: MIT License",
   "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
   "Topic :: Security",
 ]
 dependencies = [
@@ -20,6 +24,11 @@ dependencies = [
   "fastapi",
   "uvicorn",
 ]
+
+[project.urls]
+Homepage = "https://github.com/scs0209/laya-guard"
+Issues = "https://github.com/scs0209/laya-guard/issues"
+Changelog = "https://github.com/scs0209/laya-guard/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 dev = ["pytest"]
