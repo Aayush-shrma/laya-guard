@@ -68,6 +68,20 @@ requests by text alone (source tagging is the intended fix). The 24 overblocked
 benign cases are mostly English prompts — the model is tuned for Korean-heavy
 input. Details in [eval/](eval/).
 
+## Telemetry (measured dogfooding)
+
+Every judgment is appended to a local JSONL log
+(`~/.local/share/laya-guard/verdicts.jsonl`). **The raw `tool_call` text is never
+stored** — only metadata (action, risk, policy, latency) plus a truncated SHA-256
+for counting unique prompts.
+
+```bash
+laya-guard stats   # verdict distribution, block/review rates, top policies, latency
+```
+
+Disable with `LAYA_GUARD_LOG=0`, relocate with `LAYA_GUARD_LOG_PATH=...`.
+Publish the aggregates (never raw prompts) as field evidence next to benchmarks.
+
 ## Policies (10)
 
 | id | What it catches | Regex hit ⇒ |

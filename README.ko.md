@@ -65,6 +65,20 @@ curl -X POST localhost:8787/guard -H 'Content-Type: application/json' \
 정식 대응). 오탐 24건은 대개 영어 프롬프트로, 모델이 한국어 위주로 튜닝된 탓입니다.
 자세히는 [eval/](eval/) 참조.
 
+## 텔레메트리 (계측된 도그푸딩)
+
+매 판정은 로컬 JSONL 로그에 추가됩니다
+(`~/.local/share/laya-guard/verdicts.jsonl`). **원문 `tool_call`은 절대 저장하지
+않습니다.** 메타데이터(판정·risk·정책·지연시간)와 고유 프롬프트 계수용 SHA-256
+앞자리만 남습니다.
+
+```bash
+laya-guard stats   # 판정 분포, block/review율, 상위 정책, 지연시간
+```
+
+`LAYA_GUARD_LOG=0`으로 끄고, `LAYA_GUARD_LOG_PATH=...`로 위치를 바꿀 수 있습니다.
+집계치(원문 아님)를 공개하면 벤치 점수 옆에 붙일 실전 근거가 됩니다.
+
 ## 정책 (10종)
 
 | id | 잡는 것 | 정규식 적중 시 |

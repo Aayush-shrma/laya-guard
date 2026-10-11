@@ -1,10 +1,23 @@
 """laya-guard HTTP server. POST /guard + Jev-compatible POST /v1/systemone."""
 from __future__ import annotations
+import time
 from fastapi import FastAPI
 from pydantic import BaseModel
 from .guard import judge, is_mock
+from .log import log_verdict
 
 app = FastAPI(title="laya-guard")
+
+
+def _judge_and_log(text: str, source: str):
+    t0 = time.perf_counter()
+    v = judge(text, source=source)
+    log_verdict(
+        action=v.action, risk=v.risk, policy_id=v.policy_id, reason=v.reason,
+        mock=v.mock, source=source,
+        latency_ms=(time.perf_counter() - t0) * 1000.0, tool_call=text,
+    )
+    return v
 
 class GuardReq(BaseModel):
     tool_call: str = ""
@@ -25,7 +38,7 @@ def health():
 @app.post("/guard", response_model=GuardRes)
 def guard(req: GuardReq):
     text = req.tool_call or req.state
-    v = judge(text, source=req.source)
+    v = _judge_and_log(text, source=req.source)
     return GuardRes(action=v.action, risk=v.risk, policy_id=v.policy_id, reason=v.reason, mock=v.mock)
 
 @app.post("/v1/systemone")
@@ -35,7 +48,7 @@ def systemone(body: dict):
     if isinstance(state, dict):
         import json
         state = json.dumps(state, ensure_ascii=False)
-    v = judge(str(state), source=str(body.get("source", "user")) if isinstance(body, dict) else "user")
+    v = _judge_and_log(str(state), source=str(body.get("source", "user")) if isinstance(body, dict) else "user")
     return {
         "answers": {
             "action": {"choice": v.action},

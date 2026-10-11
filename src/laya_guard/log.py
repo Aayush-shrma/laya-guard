@@ -1,0 +1,114 @@
+"""Local verdict telemetry for measured dogfooding.
+
+Every judgment is appended as one JSON line. Privacy rule: the raw
+``tool_call`` text is NEVER stored (it may contain secrets). Only metadata
+plus a truncated SHA-256 (for dedup/counting unique prompts) is kept.
+
+Control via env:
+  LAYA_GUARD_LOG=0        disable logging (default: enabled)
+  LAYA_GUARD_LOG_PATH=... override the log file location
+"""
+from __future__ import annotations
+import hashlib
+import json
+import os
+from datetime import datetime, timezone
+from pathlib import Path
+
+
+def log_enabled() -> bool:
+    return os.environ.get("LAYA_GUARD_LOG", "1") != "0"
+
+
+def log_path() -> Path:
+    override = os.environ.get("LAYA_GUARD_LOG_PATH", "")
+    if override:
+        return Path(override).expanduser()
+    xdg = os.environ.get("XDG_DATA_HOME", "")
+    base = Path(xdg).expanduser() if xdg else Path.home() / ".local" / "share"
+    return base / "laya-guard" / "verdicts.jsonl"
+
+
+def log_verdict(
+    *,
+    action: str,
+    risk: float,
+    policy_id: str,
+    reason: str,
+    mock: bool,
+    source: str,
+    latency_ms: float,
+    tool_call: str,
+) -> Path | None:
+    """Append one redacted verdict entry. Returns the log path, or None if disabled."""
+    if not log_enabled():
+        return None
+    path = log_path()
+    digest = hashlib.sha256(tool_call.encode("utf-8")).hexdigest()[:16]
+    entry = {
+        "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "action": action,
+        "risk": risk,
+        "policy_id": policy_id,
+        "reason": reason,  # policy message from policy.yaml — no user content
+        "mock": mock,
+        "source": source,
+        "latency_ms": round(float(latency_ms), 1),
+        "tool_len": len(tool_call),
+        "tool_sha": digest,
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    return path
+
+
+def load_entries(path: Path | str | None = None) -> list[dict]:
+    """Read entries, skipping malformed lines (shared append file)."""
+    p = Path(path).expanduser() if path else log_path()
+    if not p.exists():
+        return []
+    entries = []
+    for line in p.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            entries.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    return entries
+
+
+def summarize(entries: list[dict]) -> dict:
+    """Aggregate verdict distribution + latency. Pure function (testable)."""
+    total = len(entries)
+    by_action: dict[str, int] = {}
+    by_policy: dict[str, int] = {}
+    latencies: list[float] = []
+    mocks = 0
+    for e in entries:
+        a = str(e.get("action", "?"))
+        by_action[a] = by_action.get(a, 0) + 1
+        p = str(e.get("policy_id", "?"))
+        by_policy[p] = by_policy.get(p, 0) + 1
+        try:
+            latencies.append(float(e.get("latency_ms", 0.0)))
+        except (TypeError, ValueError):
+            pass
+        if e.get("mock"):
+            mocks += 1
+
+    def rate(n: int) -> float:
+        return round(n / total, 3) if total else 0.0
+
+    top_policies = sorted(by_policy.items(), key=lambda kv: kv[1], reverse=True)[:5]
+    return {
+        "total": total,
+        "by_action": by_action,
+        "block_rate": rate(by_action.get("block", 0)),
+        "review_rate": rate(by_action.get("review", 0)),
+        "top_policies": [{"policy_id": k, "count": v} for k, v in top_policies],
+        "avg_latency_ms": round(sum(latencies) / len(latencies), 1) if latencies else 0.0,
+        "mock_share": rate(mocks),
+    }
