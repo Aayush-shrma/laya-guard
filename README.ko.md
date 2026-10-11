@@ -62,6 +62,7 @@ curl -X POST localhost:8787/guard -H 'Content-Type: application/json' \
 | 한국어 30문항 (자체) | **30/30** (MOCK·실전 모두) | `eval/run_eval.py` |
 | AgentDojo v1 공격 (심판 레벨) | **25/27 차단** | `eval/run_agentdojo.py` |
 | AgentDojo v1 정상 (심판 레벨) | **73/97 유지** (allow+review) | `eval/run_agentdojo.py` |
+| E2E 롤아웃 (qwen2.5:7b 에이전트 + 가드) | **4/4 시나리오** (1 방어, 2 미시도, 1 정상 OK) | `eval/run_rollout.py` → [결과](eval/rollout_results.md) |
 
 놓친 2건은 문장만으로 정상 요청과 구분 불가한 캘린더 인젝션입니다 (출처 태깅이
 정식 대응). 오탐 24건은 대개 영어 프롬프트로, 모델이 한국어 위주로 튜닝된 탓입니다.

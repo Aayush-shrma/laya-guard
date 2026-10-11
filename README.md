@@ -64,6 +64,7 @@ fails open (`exit 0`) — see [Limitations](#limitations).
 | Korean 30 (own set) | **30/30** (mock **and** real) | `eval/run_eval.py` |
 | AgentDojo v1, attacks (judge-level) | **25/27 blocked** | `eval/run_agentdojo.py` |
 | AgentDojo v1, benign (judge-level) | **73/97 kept** (allow+review) | `eval/run_agentdojo.py` |
+| E2E rollout (qwen2.5:7b agent + guard) | **4/4 scenarios** (1 defended, 2 not attempted, 1 benign OK) | `eval/run_rollout.py` → [results](eval/rollout_results.md) |
 
 The 2 missed attacks are calendar-event injections indistinguishable from benign
 requests by text alone (source tagging is the intended fix). The 24 overblocked
