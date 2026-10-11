@@ -70,6 +70,16 @@ warmed up). Regex hits return instantly without invoking the model.
 | Codex CLI | [`PreToolUse` hook](integrations/codex/) | allow + stderr note (no ask lane) |
 | Cursor | [`beforeShellExecution` hook](integrations/cursor/) | `ask` (human approval) |
 | Kilo Code | [`tool.execute.before` plugin](integrations/kilo/laya-guard.ts) | allow + stderr warning |
+| Windsurf | [`pre_run_command` hook](integrations/windsurf/guard.py) | exit 0 + stderr note |
+| Cline | [`PreToolUse` executable](integrations/cline/PreToolUse) | passes (`cancel: false`) |
+| Gemini CLI | [`BeforeTool` hook](integrations/gemini/check.py) | exit 0 + stderr note |
+| Qwen Code | [`PreToolUse` hook](integrations/qwen/check.py) | `ask` (deny when headless) |
+| Amp | [`delegate` helper](integrations/amp/permissions-helper) | exit 1 = ask |
+| Copilot CLI | [`preToolUse` hook](integrations/copilot/policy.py) | `ask` (deny when headless) |
+
+No hook mechanism, so no adapter: Aider, Roo Code (shut down May 2026),
+Continue (tiers only, repo archived), Junie (allow/ask only). Details in
+[integrations/](integrations/).
 
 Setup per agent: [integrations/](integrations/). Only Cursor routes `review`
 to a human; elsewhere `review` warns and passes — use native `permission`/
@@ -77,8 +87,8 @@ to a human; elsewhere `review` warns and passes — use native `permission`/
 
 ## Use cases
 
-Ready-made adapters live in [integrations/](integrations/): Claude Code,
-OpenCode, Codex CLI, Cursor, and Kilo Code.
+Ready-made adapters for 11 agents live in [integrations/](integrations/) —
+see Supported agents above for the full list.
 
 ### 1. Guard Claude Code (PreToolUse hook)
 

@@ -1,0 +1,56 @@
+#!/usr/bin/env python3
+"""laya-guard for Amp — delegate permissions helper.
+
+Install: copy somewhere on PATH (e.g. ~/.local/bin/amp-laya-guard), chmod +x,
+then: amp permissions add delegate --to amp-laya-guard '*'
+Needs laya-guard on localhost:8787. Override: LAYA_GUARD_URL env.
+
+Contract (per Amp permissions guide): tool parameters as JSON on stdin;
+exit 0 = allow, 1 = ask, 2 = reject. This maps the guard verdict 1:1 —
+block -> 2, review -> 1, allow -> 0. Guard unreachable or unreadable
+input -> fail open (exit 0).
+"""
+import json
+import os
+import sys
+import urllib.request
+
+GUARD_URL = os.environ.get("LAYA_GUARD_URL", "http://localhost:8787/guard")
+
+
+def judge(text: str) -> dict | None:
+    try:
+        req = urllib.request.Request(
+            GUARD_URL,
+            data=json.dumps({"tool_call": text, "source": "tool"}).encode(),
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=30) as r:
+            return json.loads(r.read())
+    except Exception:
+        return None
+
+
+def main() -> int:
+    try:
+        raw = sys.stdin.read()
+        text = raw if raw.strip() else "{}"
+    except Exception:
+        return 0  # unreadable input -> fail open
+    verdict = judge(text)
+    if verdict is None:
+        return 0  # guard unreachable -> fail open
+    action = verdict.get("action")
+    if action == "block":
+        print(f"laya-guard blocked [{verdict.get('policy_id')} risk={verdict.get('risk')}]: "
+              f"{verdict.get('reason')}", file=sys.stderr)
+        return 2
+    if action == "review":
+        print(f"laya-guard review [{verdict.get('policy_id')} risk={verdict.get('risk')}]: "
+              f"{verdict.get('reason')}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

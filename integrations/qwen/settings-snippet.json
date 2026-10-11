@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "run_shell_command",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$QWEN_PROJECT_DIR/.qwen/hooks/check.py\"",
+            "name": "laya-guard",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

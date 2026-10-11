@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "hooks": {
+    "preToolUse": [
+      {
+        "type": "command",
+        "bash": "~/.copilot/hooks/laya-guard.py",
+        "timeoutSec": 30
+      }
+    ]
+  }
+}

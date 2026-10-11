@@ -68,6 +68,15 @@ curl -X POST localhost:8787/guard -H 'Content-Type: application/json' \
 | Codex CLI | [`PreToolUse` 훅](integrations/codex/) | allow + stderr 안내 (ask 불가) |
 | Cursor | [`beforeShellExecution` 훅](integrations/cursor/) | `ask` (사람 승인) |
 | Kilo Code | [`tool.execute.before` 플러그인](integrations/kilo/laya-guard.ts) | allow + stderr 경고 |
+| Windsurf | [`pre_run_command` 훅](integrations/windsurf/guard.py) | exit 0 + stderr 안내 |
+| Cline | [`PreToolUse` 실행파일](integrations/cline/PreToolUse) | 통과 (`cancel: false`) |
+| Gemini CLI | [`BeforeTool` 훅](integrations/gemini/check.py) | exit 0 + stderr 안내 |
+| Qwen Code | [`PreToolUse` 훅](integrations/qwen/check.py) | `ask` (headless에선 deny) |
+| Amp | [`delegate` 헬퍼](integrations/amp/permissions-helper) | exit 1 = ask |
+| Copilot CLI | [`preToolUse` 훅](integrations/copilot/policy.py) | `ask` (headless에선 deny) |
+
+훅 메커니즘이 없어 어댑터 불가: Aider, Roo Code(2026-05 종료), Continue(단계제만,
+저장소 아카이브), Junie(allow/ask만). 자세히는 [integrations/](integrations/).
 
 에이전트별 설치법: [integrations/](integrations/). `review`를 사람에게 넘기는
 건 Cursor뿐입니다. 나머지는 경고 후 통과하니, 강제 승인이 필요하면 각 도구의

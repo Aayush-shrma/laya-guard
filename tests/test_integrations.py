@@ -110,6 +110,82 @@ def test_cursor_fail_open():
     assert p.returncode == 0
 
 
+NEW = {
+    "windsurf": ROOT / "integrations" / "windsurf" / "guard.py",
+    "cline": ROOT / "integrations" / "cline" / "PreToolUse",
+    "gemini": ROOT / "integrations" / "gemini" / "check.py",
+    "qwen": ROOT / "integrations" / "qwen" / "check.py",
+    "amp": ROOT / "integrations" / "amp" / "permissions-helper",
+    "copilot": ROOT / "integrations" / "copilot" / "policy.py",
+}
+
+PAYLOADS = {
+    "windsurf": lambda t: json.dumps({"tool_info": {"command_line": t, "cwd": "/x"}}),
+    "cline": lambda t: json.dumps({"preToolUse": {"toolName": "bash", "parameters": {"command": t}}}),
+    "gemini": lambda t: json.dumps({"tool_name": "run_shell_command", "tool_input": {"command": t}}),
+    "qwen": lambda t: json.dumps({"tool_name": "run_shell_command", "tool_input": {"command": t}}),
+    "amp": lambda t: t,
+    "copilot": lambda t: json.dumps({"command": t}),
+}
+
+
+def test_new_block_contracts():
+    # windsurf: exit 2. cline: cancel true. gemini: decision deny.
+    # qwen/copilot: permissionDecision deny. amp: exit 2.
+    srv, url = _stub_url()
+    try:
+        p = _run(NEW["windsurf"], PAYLOADS["windsurf"]("BLOCKME x"), url)
+        assert p.returncode == 2
+        p = _run(NEW["cline"], PAYLOADS["cline"]("BLOCKME x"), url)
+        assert p.returncode == 0 and json.loads(p.stdout)["cancel"] is True
+        p = _run(NEW["gemini"], PAYLOADS["gemini"]("BLOCKME x"), url)
+        assert p.returncode == 0 and json.loads(p.stdout)["decision"] == "deny"
+        p = _run(NEW["copilot"], PAYLOADS["copilot"]("BLOCKME x"), url)
+        assert p.returncode == 0
+        assert json.loads(p.stdout).get("permissionDecision") == "deny"
+        p = _run(NEW["qwen"], PAYLOADS["qwen"]("BLOCKME x"), url)
+        assert p.returncode == 0
+        out = json.loads(p.stdout)["hookSpecificOutput"]
+        assert out["permissionDecision"] == "deny"
+        assert out["hookEventName"] == "PreToolUse"
+        p = _run(NEW["amp"], PAYLOADS["amp"]("BLOCKME x"), url)
+        assert p.returncode == 2
+    finally:
+        srv.shutdown()
+
+
+def test_new_review_contracts():
+    # qwen/copilot/amp route review to a human lane; others pass with a note.
+    srv, url = _stub_url()
+    try:
+        p = _run(NEW["qwen"], PAYLOADS["qwen"]("REVIEWME x"), url)
+        assert json.loads(p.stdout)["hookSpecificOutput"].get("permissionDecision") == "ask"
+        p = _run(NEW["copilot"], PAYLOADS["copilot"]("REVIEWME x"), url)
+        assert json.loads(p.stdout).get("permissionDecision") == "ask"
+        p = _run(NEW["amp"], PAYLOADS["amp"]("REVIEWME x"), url)
+        assert p.returncode == 1
+        for name in ("windsurf", "cline", "gemini"):
+            p = _run(NEW[name], PAYLOADS[name]("REVIEWME x"), url)
+            assert p.returncode == 0
+    finally:
+        srv.shutdown()
+
+
+def test_new_allow_and_fail_open():
+    srv, url = _stub_url()
+    try:
+        for name, script in NEW.items():
+            p = _run(script, PAYLOADS[name]("ls -la"), url)
+            assert p.returncode == 0, name
+    finally:
+        srv.shutdown()
+    for name, script in NEW.items():
+        p = _run(script, PAYLOADS[name]("ls"), "http://127.0.0.1:1/none")
+        assert p.returncode == 0, name
+        p = _run(script, "not json{{{", "http://127.0.0.1:1/none")
+        assert p.returncode == 0, name
+
+
 def test_config_files_parse():
     assert json.loads((ROOT / "integrations" / "cursor" / "hooks.json").read_text())["version"] == 1
     try:

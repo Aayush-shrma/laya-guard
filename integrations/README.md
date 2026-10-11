@@ -12,6 +12,18 @@ server is unreachable — see the main README's Limitations.
 | Codex CLI | `PreToolUse` command hook (deny JSON) | [`codex/`](codex/) | allow + stderr note (PreToolUse has no ask lane) |
 | Cursor | `beforeShellExecution` hook (exit 2 / deny JSON) | [`cursor/`](cursor/) | `ask` (human approval lane) |
 | Kilo Code | `tool.execute.before` plugin (throw blocks) | [`kilo/laya-guard.ts`](kilo/laya-guard.ts) | allow + stderr warning |
+| Windsurf (Cascade) | `pre_run_command` hook (exit 2 blocks) | [`windsurf/`](windsurf/) (config: `~/.codeium/windsurf/hooks.json`) | exit 0 + stderr note |
+| Cline | `PreToolUse` executable (`cancel: true/false`) | [`cline/PreToolUse`](cline/PreToolUse) (copy to `.clinerules/hooks/PreToolUse`) | passes (`cancel: false`) |
+| Gemini CLI | `BeforeTool` hook (`decision: deny` / exit 2) | [`gemini/`](gemini/) | exit 0 + stderr note |
+| Qwen Code | `PreToolUse` hook (`permissionDecision`) | [`qwen/`](qwen/) | `ask` (falls back to deny headless) |
+| Amp | `delegate` permissions helper (exit 0/1/2) | [`amp/permissions-helper`](amp/permissions-helper) (`amp permissions add delegate`) | exit 1 = ask |
+| Copilot CLI | `preToolUse` hook (`permissionDecision`) | [`copilot/`](copilot/) | `ask` (deny when headless) |
+
+No hook mechanism (documented as unsupported — no adapter possible):
+**Aider** (no pre-execution hook or policy found in official docs),
+**Roo Code** (no released script hook; extension shut down May 2026 — Kilo Code
+is its active lineage), **Continue** (allow/ask/exclude tiers only, no hooks;
+repo archived), **Junie** (allow/ask allowlists only, no deny, no hooks).
 
 ## Claude Code
 
@@ -47,3 +59,45 @@ Copy `kilo/laya-guard.ts` to `.kilo/plugin/laya-guard.ts` (project) or
 `~/.config/kilo/plugin/laya-guard.ts` (global). For hard asks, add
 `permission` rules in `kilo.jsonc`. Docs:
 https://kilo.ai/docs/automate/extending/plugins
+
+## Windsurf (Cascade)
+
+1. `cp windsurf/guard.py <hooks-dir>/ && chmod +x <hooks-dir>/guard.py`
+2. Add a `pre_run_command` entry to `~/.codeium/windsurf/hooks.json`
+   (workspace: `.devin/hooks.json`):
+   `{"hooks": {"pre_run_command": [{"command": "<hooks-dir>/guard.py",
+   "show_output": true}]}}`. Exit 2 blocks. Docs: Cascade Hooks.
+
+## Cline
+
+Copy `cline/PreToolUse` to `.clinerules/hooks/PreToolUse` (project) or
+`~/Documents/Cline/Hooks/PreToolUse` (global), `chmod +x`, and enable hooks
+in Cline Features settings. The script returns `{"cancel": true/false}`.
+
+## Gemini CLI
+
+1. `cp gemini/check.py .gemini/hooks/ && chmod +x .gemini/hooks/check.py`
+2. Merge `gemini/settings-snippet.json` into `.gemini/settings.json`
+   (project) or `~/.gemini/settings.json` (user). Deny via
+   `{"decision": "deny"}` or exit 2. Docs: Gemini CLI hooks guide.
+
+## Qwen Code
+
+1. `cp qwen/check.py .qwen/hooks/ && chmod +x .qwen/hooks/check.py`
+2. Merge `qwen/settings-snippet.json` into `.qwen/settings.json`
+   (project) or `~/.qwen/settings.json` (user). `review` maps to `ask`.
+   Docs: Qwen Code hooks reference.
+
+## Amp
+
+1. `cp amp/permissions-helper ~/.local/bin/amp-laya-guard && chmod +x ~/.local/bin/amp-laya-guard`
+2. `amp permissions add delegate --to amp-laya-guard '*'`
+   Exit codes are the full verdict: 0 allow, 1 ask, 2 reject.
+   Docs: Amp permissions guide.
+
+## GitHub Copilot CLI
+
+1. `cp copilot/policy.py ~/.copilot/hooks/ && chmod +x ~/.copilot/hooks/policy.py`
+2. Add `copilot/laya-guard.json` to `~/.copilot/hooks/` (user) or
+   `.github/hooks/` (repo). `review` maps to `ask` (deny when headless).
+   Docs: Copilot hooks reference.
