@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/logo.svg" width="128" alt="laya-guard logo"></p>
+
 # laya-guard — a free local guardrail for AI coding agents
 
 [![ci](https://github.com/scs0209/laya-guard/actions/workflows/ci.yml/badge.svg)](https://github.com/scs0209/laya-guard/actions/workflows/ci.yml)
@@ -6,7 +8,7 @@
 
 > **Every `tool_call` judged on your laptop in ~0.1s. No per-decision billing.**
 
-![demo](demo/demo.gif)
+![demo](demo/demo_en.gif)
 
 AI coding agents run shell commands, move money, and ship data outward. Each step
 deserves a safety check — but per-decision API pricing makes per-step judging

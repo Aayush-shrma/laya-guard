@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/logo.svg" width="128" alt="laya-guard 로고"></p>
+
 # laya-guard — AI 코딩 에이전트용 무료 로컬 가드레일
 
 [![ci](https://github.com/scs0209/laya-guard/actions/workflows/ci.yml/badge.svg)](https://github.com/scs0209/laya-guard/actions/workflows/ci.yml)
