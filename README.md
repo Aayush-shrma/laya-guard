@@ -87,6 +87,23 @@ laya-guard stats   # verdict distribution, block/review rates, top policies, lat
 Disable with `LAYA_GUARD_LOG=0`, relocate with `LAYA_GUARD_LOG_PATH=...`.
 Publish the aggregates (never raw prompts) as field evidence next to benchmarks.
 
+## How it compares
+
+Most guardrails scan **prompt text**. laya-guard sits one step later: it judges the
+**tool call the agent is about to execute**, with a human-approval lane in between.
+
+|  | laya-guard (this) | [dockndevai/laya-guard](https://pypi.org/project/laya-guard/) | [Rebuff](https://github.com/protectai/rebuff) | [LLM Guard](https://github.com/protectai/llm-guard) | [Vigil](https://github.com/deadbits/vigil-llm) |
+|---|---|---|---|---|---|
+| Guards | agent tool calls | high-risk commands (MCP) | incoming prompts | prompts + outputs | prompts + responses |
+| Fully local & free | ✅ on-device | ✅ on-device | ❌ needs OpenAI+Pinecone keys | ✅ (HF model) | ⚠️ local or OpenAI |
+| Verdict | allow / **review** / block + risk | allow / confirm / block | binary detected | valid + score | scores / thresholds |
+| Korean evaluation | ✅ 30-case set, 30/30 | ❌ none verified | ❌ | ❌ | ❌ |
+| AgentDojo numbers | ✅ 25/27, 73/97 (judge-level, self-reported) | ❌ none verified | ❌ | ❌ | ❌ |
+| Status | active, v0.1.0, MIT | MIT | ⚠️ archived May 2025 | ⚠️ archived, unmaintained | alpha, Apache-2.0 |
+
+No verified third-party AgentDojo score exists for any tool in this table —
+ours is self-reported and judge-level (see [Limitations](#limitations)).
+
 ## Policies (10)
 
 | id | What it catches | Regex hit ⇒ |
@@ -108,7 +125,8 @@ All patterns live in [policy.yaml](src/laya_guard/policy.yaml) — edit, add you
 
 - `GET /health` → `{"ok": true, "mock": false}`
 - `POST /guard` `{tool_call, source?}` → `{action, risk, policy_id, reason, mock}`
-  (`source`: `user` | `tool` | `email` | `web`; non-user sources get stricter thresholds)
+  (`source`: `user` | `tool` | `email` | `web`; non-user sources get stricter thresholds.
+  `reason` is Korean when the input contains Hangul, English otherwise.)
 - `POST /v1/systemone` — drop-in compatible shim for Jev-style `{state, questions}` calls
 
 ## Configuration

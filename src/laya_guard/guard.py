@@ -24,6 +24,7 @@ class Policy:
     patterns: list = field(default_factory=list)
     action_on_regex: str = "review"
     message: str = ""
+    message_en: str = ""
     compiled: list = field(default_factory=list, repr=False)
 
 def load_policies(path: Path | str = POLICY_PATH) -> tuple[list[Policy], dict]:
@@ -36,6 +37,7 @@ def load_policies(path: Path | str = POLICY_PATH) -> tuple[list[Policy], dict]:
             patterns=p.get("patterns", []),
             action_on_regex=p.get("action_on_regex", "review"),
             message=p.get("message", ""),
+            message_en=p.get("message_en", "") or "",
         )
         pol.compiled = [re.compile(pat, re.IGNORECASE) for pat in pol.patterns]
         policies.append(pol)
@@ -179,6 +181,9 @@ SOURCE_PROFILES = {
     "web": {"block": 0.6, "review": 0.30},
 }
 
+def _is_korean(text: str) -> bool:
+    return bool(re.search("[가-힣]", text))
+
 def judge(tool_call: str, source: str = "user") -> Verdict:
     _ensure()
     hit = _regex_hit(tool_call)
@@ -202,5 +207,11 @@ def judge(tool_call: str, source: str = "user") -> Verdict:
     if risk >= prof["block"]:
         action = "block"
     pid = hit.id if hit else "general"
-    reason = (hit.message if hit else "") or ("Laya 심판 결과" if not mock else "정규식+휴리스틱 (MOCK)")
+    # reason 언어: 입력에 한글이 있으면 한국어, 아니면 영어 (API 기본값은 영어권 대응)
+    ko = _is_korean(tool_call)
+    if hit:
+        reason = hit.message if (ko and hit.message) else (hit.message_en or hit.message)
+    else:
+        reason = ("Laya 심판 결과" if ko else "Judged by Laya") if not mock else \
+                 ("정규식+휴리스틱 (MOCK)" if ko else "Regex+heuristics (MOCK)")
     return Verdict(action=action, risk=risk, policy_id=pid, reason=reason, mock=mock)

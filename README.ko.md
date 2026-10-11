@@ -84,6 +84,23 @@ laya-guard stats   # 판정 분포, block/review율, 상위 정책, 지연시간
 `LAYA_GUARD_LOG=0`으로 끄고, `LAYA_GUARD_LOG_PATH=...`로 위치를 바꿀 수 있습니다.
 집계치(원문 아님)를 공개하면 벤치 점수 옆에 붙일 실전 근거가 됩니다.
 
+## 비교표
+
+대부분의 가드레일은 **프롬프트 텍스트**를 검사합니다. laya-guard는 한 단계 뒤,
+**에이전트가 실행하려는 tool 호출 자체**를 심판하며, 중간에 사람 승인 단계가 있습니다.
+
+|  | laya-guard (이것) | [dockndevai/laya-guard](https://pypi.org/project/laya-guard/) | [Rebuff](https://github.com/protectai/rebuff) | [LLM Guard](https://github.com/protectai/llm-guard) | [Vigil](https://github.com/deadbits/vigil-llm) |
+|---|---|---|---|---|---|
+| 검사 대상 | 에이전트 tool 호출 | 고위험 명령 (MCP) | 입력 프롬프트 | 프롬프트 + 출력 | 프롬프트 + 응답 |
+| 완전 로컬·무료 | ✅ 온디바이스 | ✅ 온디바이스 | ❌ OpenAI+Pinecone 키 필요 | ✅ (HF 모델) | ⚠️ 로컬 또는 OpenAI |
+| 판정 | allow / **review** / block + risk | allow / confirm / block | 이진 판정 | valid + score | 점수 / 임계값 |
+| 한국어 평가 | ✅ 30문항 30/30 | ❌ 확인 불가 | ❌ | ❌ | ❌ |
+| AgentDojo 수치 | ✅ 25/27, 73/97 (심판 레벨, 자체 측정) | ❌ 확인 불가 | ❌ | ❌ | ❌ |
+| 상태 | 개발 중, v0.1.0, MIT | MIT | ⚠️ 2025-05 아카이브 | ⚠️ 아카이브, 미유지보수 | 알파, Apache-2.0 |
+
+이 표의 어떤 도구도 제3자 검증 AgentDojo 점수는 없습니다. 우리 수치도 자체 측정·심판
+레벨입니다 ([한계](#한계) 참조).
+
 ## 정책 (10종)
 
 | id | 잡는 것 | 정규식 적중 시 |
@@ -105,7 +122,8 @@ laya-guard stats   # 판정 분포, block/review율, 상위 정책, 지연시간
 
 - `GET /health` → `{"ok": true, "mock": false}`
 - `POST /guard` `{tool_call, source?}` → `{action, risk, policy_id, reason, mock}`
-  (`source`: `user` | `tool` | `email` | `web`. 비사용자 출처는 임계값 강화)
+  (`source`: `user` | `tool` | `email` | `web`. 비사용자 출처는 임계값 강화.
+  `reason`은 입력에 한글이 있으면 한국어, 아니면 영어로 반환)
 - `POST /v1/systemone` — Jev식 `{state, questions}` 호출용 드롭인 shim
 
 ## 설정
