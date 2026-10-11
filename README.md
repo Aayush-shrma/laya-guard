@@ -8,7 +8,11 @@
 
 > **Every `tool_call` judged on your laptop in ~0.1s. No per-decision billing.**
 
-![demo](demo/demo_en.gif)
+**Demo (English):**
+![demo in English](demo/demo_en.gif)
+
+**Demo (한국어):**
+![demo in Korean](demo/demo.gif)
 
 AI coding agents run shell commands, move money, and ship data outward. Each step
 deserves a safety check — but per-decision API pricing makes per-step judging

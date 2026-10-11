@@ -7,7 +7,11 @@
 
 > **매 `tool_call`을 노트북에서 ~0.1초에 심판. 건당 과금 없음.**
 
-![demo](demo/demo.gif)
+**데모 (한국어):**
+![한국어 데모](demo/demo.gif)
+
+**Demo (English):**
+![English demo](demo/demo_en.gif)
 
 AI 코딩 에이전트는 셸을 실행하고, 돈을 움직이고, 데이터를 외부로 보냅니다. 매 스텝마다
 검사해야 하지만 건당 과금 API로는 매 호출 검사가 비현실적입니다. laya-guard는 소형
