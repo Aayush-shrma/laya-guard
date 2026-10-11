@@ -100,7 +100,7 @@ Publish the aggregates (never raw prompts) as field evidence next to benchmarks.
 | `mass-delete` | `DROP TABLE`, `s3 rm --recursive`, `kubectl delete --all` | review |
 | `auth-bypass` | auth/TLS disabling, password resets, KR+EN | block |
 
-All patterns live in [policy.yaml](policy.yaml) — edit, add your own, no code changes needed.
+All patterns live in [policy.yaml](src/laya_guard/policy.yaml) — edit, add your own, no code changes needed.
 
 ## API
 

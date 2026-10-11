@@ -1,0 +1,25 @@
+name: publish
+
+# First release needs a one-time web step (no token):
+# PyPI → laya-guardrail → Settings → Trusted Publisher:
+#   owner scs0209, repo laya-guard, workflow publish.yml, env pypi
+# Afterwards: git tag v0.1.0 && git push origin v0.1.0
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  pypi:
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install build && python -m build
+      - uses: pypa/gh-action-pypi-publish@release/v1

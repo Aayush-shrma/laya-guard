@@ -97,7 +97,7 @@ laya-guard stats   # 판정 분포, block/review율, 상위 정책, 지연시간
 | `mass-delete` | `DROP TABLE`, `s3 rm --recursive`, `kubectl delete --all` | review |
 | `auth-bypass` | 인증/TLS 무력화, 비밀번호 초기화, 한영 | block |
 
-패턴은 전부 [policy.yaml](policy.yaml)에 있습니다. 코드 수정 없이 추가·수정 가능.
+패턴은 전부 [policy.yaml](src/laya_guard/policy.yaml)에 있습니다. 코드 수정 없이 추가·수정 가능.
 
 ## API
 

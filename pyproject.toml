@@ -1,10 +1,19 @@
 [project]
-name = "laya-guard"
+name = "laya-guardrail"
 version = "0.1.0"
 description = "OpenClaw/OpenCode tool_call guardrail - every call judged locally by Laya (free), not billed per decision like Jev"
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.10"
+authors = [{ name = "scs0209" }]
+urls = { Homepage = "https://github.com/scs0209/laya-guard" }
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Topic :: Security",
+]
 dependencies = [
   "laya",
   "pyyaml",
@@ -17,6 +26,9 @@ dev = ["pytest"]
 
 [project.scripts]
 laya-guard = "laya_guard.cli:main"
+
+[tool.setuptools.package-data]
+laya_guard = ["*.yaml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

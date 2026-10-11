@@ -6,7 +6,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 import yaml
 
-POLICY_PATH = Path(__file__).resolve().parent.parent.parent / "policy.yaml"
+# policy.yaml ships inside the package (see pyproject package-data) so pip installs work.
+POLICY_PATH = Path(__file__).resolve().parent / "policy.yaml"
 
 @dataclass
 class Verdict:
