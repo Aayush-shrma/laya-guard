@@ -122,14 +122,17 @@ All patterns live in [policy.yaml](policy.yaml) — edit, add your own, no code 
 - Regex `block` hits return a hardcoded `risk: 0.92` — the model is skipped, so the
   score is a flag, not a calibrated probability.
 - Per-policy Laya hints (`choice_hint`/`score_hint` in `policy.yaml`) are declared
-  but **not yet wired into judging** — one generic question set is used for all policies.
+  but deliberately **not** wired: appending them to question instructions dropped
+  AgentDojo attack recall 25/27 → 14/27 (overblocks fell only as a side effect of
+  blanket leniency, so it was reverted). One generic question set is used until a
+  mechanism that survives eval is found.
 - AgentDojo numbers are **judge-level only** (attack text judged directly, default
   `source=user`), not end-to-end agent rollouts. See `eval/run_rollout.py` for the
   rollout harness (requires Ollama + `qwen2.5:7b`).
 
 ## Roadmap
 
-- [ ] Wire per-policy hints into Laya questions
+- [ ] Per-policy judging via a mechanism that survives eval (hint-append regressed recall — reverted)
 - [ ] Verdict provenance field (`regex` vs `laya`) in `/guard` responses
 - [ ] Local verdict logging for measured dogfooding (redacted JSONL + override rates)
 - [ ] Cut the 24 English overblocks without losing attack recall
