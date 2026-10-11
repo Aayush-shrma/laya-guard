@@ -14,6 +14,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 CODEX = ROOT / "integrations" / "codex" / "check_command.py"
 CURSOR = ROOT / "integrations" / "cursor" / "laya-guard.py"
+CLAUDE = ROOT / "guard-hook.sh"
 
 
 class StubHandler(BaseHTTPRequestHandler):
@@ -46,6 +47,33 @@ def _run(script: Path, payload: str, url: str) -> subprocess.CompletedProcess:
     env = dict(os.environ, LAYA_GUARD_URL=url)
     return subprocess.run([sys.executable, str(script)], input=payload,
                           capture_output=True, text=True, env=env, timeout=60)
+
+
+def _run_claude(command: str, url: str) -> subprocess.CompletedProcess:
+    payload = json.dumps({"tool_name": "Bash",
+                          "tool_input": {"command": command, "description": "BLOCKME desc"}})
+    env = dict(os.environ, LAYA_GUARD_URL=url)
+    return subprocess.run(["bash", str(CLAUDE)], input=payload,
+                          capture_output=True, text=True, env=env, timeout=60)
+
+
+def test_claude_hook_contract():
+    # block -> exit 2, review/allow -> exit 0, guard down -> fail open
+    srv, url = _stub_url()
+    try:
+        p = _run_claude("BLOCKME please", url)
+        assert p.returncode == 2 and "blocked" in p.stderr
+        assert _run_claude("REVIEWME x", url).returncode == 0
+        assert _run_claude("ls", url).returncode == 0  # description is not judged
+        # non-Bash tools: tool name + flattened input values are judged
+        p = subprocess.run(["bash", str(CLAUDE)], capture_output=True, text=True, timeout=60,
+                           env=dict(os.environ, LAYA_GUARD_URL=url),
+                           input=json.dumps({"tool_name": "Write",
+                                             "tool_input": {"file_path": "a", "content": "BLOCKME"}}))
+        assert p.returncode == 2
+    finally:
+        srv.shutdown()
+    assert _run_claude("ls", "http://127.0.0.1:1/none").returncode == 0
 
 
 def test_codex_block_denies():

@@ -7,6 +7,32 @@ defaults:
   review_threshold: 0.45  # >= 0.45 → 폰 승인카드
   model: multilingual     # 한국어 포함이므로 다국어 체크포인트 고정
 
+# 안전 명령 레인: 모델을 건너뛰고 allow. 아래 조건은 코드(guard.py)가 강제한다.
+#   · 아래 위험 정책 정규식에 걸리지 않음 (걸리면 정책이 우선)
+#   · 셸 메타문자 없음: ; & | ` $ < > ( ) { } \ 줄바꿈 (체이닝/파이프/리다이렉트/치환)
+#   · 실행·쓰기 플래그 없음: -exec, -toolexec, --config, --output, --upload-pack, --receive-pack
+#   · 민감 경로 없음: .ssh, .aws, .gnupg, .kube, .netrc, .npmrc, .pypirc, .env, id_rsa 등
+#   · 공백 정규화 후 패턴 하나와 "전체" 일치 (대소문자 구분)
+# 설치(npm/pip install)·원격(git push, npx)은 의도적으로 제외 — 모델이 심판한다.
+# test/build는 프로젝트 자체 스크립트를 실행한다는 점에 유의.
+safe_commands:
+  - 'ls( \S+)*'
+  - 'pwd'
+  - 'echo( \S+)*'
+  - '(cat|head|tail|wc|grep|rg)( \S+)+'
+  - '(mkdir|touch)( \S+)+'
+  - 'git (status|diff|log|show|add|commit|switch)( \S+)*'
+  - 'git branch( (-a|-r|-v|-vv|--list|--show-current|\w[\w./-]*))*'
+  - 'git stash( (list|show|push)( \S+)*)?'
+  - 'git checkout -b \S+'
+  - '(npm|pnpm|yarn|bun) (test|build|lint|run (build|test|lint|typecheck|format|check))( \S+)*'
+  - '(pytest|python3? -m pytest)( \S+)*'
+  - 'go (build|test|vet|fmt)( \S+)*'
+  - 'cargo (build|test|check|fmt|clippy)( \S+)*'
+  - 'make( (build|test|lint|check|all))?'
+  - 'docker (ps|images)( \S+)*'
+  - '(node|npm|pnpm|yarn|bun|python3?|pip3?|go|cargo|rustc|git|docker|java|ruby) (--version|-v|-V|version)'
+
 policies:
   - id: destructive-fs
     title: "파괴적 파일시스템 명령"
@@ -30,6 +56,8 @@ policies:
       - 'wget.*\|\s*(sh|bash)'
       - 'ngrok|expose|serveo|chisel'
       - 'scp\s+.*@'
+      - '\|\s*(nc|ncat|netcat)\s'
+      - 'curl.*\s(-d|--data\S*|-F|-T|--upload-file)\s*@'
       - 'send a link\s+\S+\s+to \w'
       - 'visit a website at the link'
       - 'security code.*(send|forward|to \S+@)'
@@ -97,6 +125,7 @@ policies:
       - 'npm install.*http://'
       - 'curl.*\.sh'
       - 'powershell.*-enc'
+      - '\|\s*(sudo\s+)?(ba|z)?sh\b'
     laya:
       choice: ["allow", "review", "block"]
       score_hint: "검증 안 된 원격 코드 실행 위험도"
@@ -110,6 +139,7 @@ policies:
       - 'sudo\s+(su|bash|sh)'
       - 'chmod\s+777'
       - 'setuid|setcap'
+      - '>\s*/etc/'
     laya:
       choice: ["allow", "review", "block"]
       score_hint: "권한 상승 악용 위험도"
@@ -124,6 +154,7 @@ policies:
       - 'systemctl enable|launchctl load'
       - 'HKLM.*Run|Startup folder'
       - '\.bashrc|\.zshrc.*curl'
+      - 'core\.(hooksPath|pager|sshCommand|fsmonitor|editor)'
     laya:
       choice: ["allow", "review", "block"]
       score_hint: "몰래 상주하려는 시도 위험도"
@@ -138,6 +169,7 @@ policies:
       - 'DELETE\s+FROM.*WHERE\s+1=1'
       - 's3 rm.*--recursive'
       - 'kubectl delete.*--all'
+      - 'git push\s.*(--force|\s-f\b)'
     laya:
       choice: ["allow", "review", "block"]
       score_hint: "되돌릴 수 없는 대량 삭제 위험도"

@@ -1,7 +1,7 @@
 """CLI: laya-guard check / serve / eval."""
 from __future__ import annotations
 import argparse, json, sys
-from .guard import judge, is_mock
+from .guard import judge, is_mock, warmup
 
 def cmd_check(args):
     text = " ".join(args.text) if args.text else sys.stdin.read()
@@ -13,6 +13,13 @@ def cmd_check(args):
 
 def cmd_serve(args):
     from .server import run
+    # Load before listening: hooks time out (and fail open) if the first
+    # request has to wait for the checkpoint download.
+    if not args.no_warmup and not is_mock():
+        print("loading Laya model (first run downloads the checkpoint)...", flush=True)
+        if not warmup():
+            print("warning: model failed to load; verdicts will fall back to "
+                  "regex+heuristics (verdict_source=heuristic)", file=sys.stderr)
     print(f"laya-guard on http://{args.host}:{args.port} mock={is_mock()}")
     run(args.host, args.port)
 
@@ -36,7 +43,8 @@ def main(argv=None):
     ap = argparse.ArgumentParser(prog="laya-guard")
     sub = ap.add_subparsers(dest="cmd", required=True)
     c = sub.add_parser("check"); c.add_argument("text", nargs="*"); c.set_defaults(fn=cmd_check)
-    s = sub.add_parser("serve"); s.add_argument("--host", default="127.0.0.1"); s.add_argument("--port", type=int, default=8787); s.set_defaults(fn=cmd_serve)
+    s = sub.add_parser("serve"); s.add_argument("--host", default="127.0.0.1"); s.add_argument("--port", type=int, default=8787)
+    s.add_argument("--no-warmup", action="store_true", help="skip loading the model before listening"); s.set_defaults(fn=cmd_serve)
     t = sub.add_parser("stats"); t.add_argument("--path", default=None); t.add_argument("--json", action="store_true"); t.set_defaults(fn=cmd_stats)
     args = ap.parse_args(argv)
     return args.fn(args)
