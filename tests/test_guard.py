@@ -21,6 +21,11 @@ def test_allow_benign():
     v = judge("README 오타 수정 PR 열어줘")
     assert v.action == "allow"
 
+def test_verdict_source():
+    # 정규식 단락이면 regex, 그 외 MOCK이면 heuristic
+    assert judge("rm -rf / --no-preserve-root").verdict_source == "regex"
+    assert judge("README 오타 수정 PR 열어줘").verdict_source == "heuristic"
+
 def test_reason_language():
     # 입력 언어에 따라 reason 언어 자동 선택 (한글 포함→KO, 그 외→EN)
     assert judge("rm -rf / --no-preserve-root").reason.startswith("Destructive")

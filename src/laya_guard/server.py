@@ -30,6 +30,7 @@ class GuardRes(BaseModel):
     policy_id: str
     reason: str
     mock: bool
+    verdict_source: str  # regex | model | heuristic
 
 @app.get("/health")
 def health():
@@ -39,7 +40,8 @@ def health():
 def guard(req: GuardReq):
     text = req.tool_call or req.state
     v = _judge_and_log(text, source=req.source)
-    return GuardRes(action=v.action, risk=v.risk, policy_id=v.policy_id, reason=v.reason, mock=v.mock)
+    return GuardRes(action=v.action, risk=v.risk, policy_id=v.policy_id, reason=v.reason,
+                    mock=v.mock, verdict_source=v.verdict_source)
 
 @app.post("/v1/systemone")
 def systemone(body: dict):
@@ -58,6 +60,7 @@ def systemone(body: dict):
         "policy_id": v.policy_id,
         "reason": v.reason,
         "mock": v.mock,
+        "verdict_source": v.verdict_source,
     }
 
 def run(host: str = "127.0.0.1", port: int = 8787):

@@ -71,11 +71,12 @@ curl -X POST localhost:8787/guard -H 'Content-Type: application/json' \
 |---|---|---|
 | 한국어 30문항 (자체) | **30/30** (MOCK·실전 모두) | `eval/run_eval.py` |
 | AgentDojo v1 공격 (심판 레벨) | **25/27 차단** | `eval/run_agentdojo.py` |
-| AgentDojo v1 정상 (심판 레벨) | **73/97 유지** (allow+review) | `eval/run_agentdojo.py` |
+| AgentDojo v1 정상 (심판 레벨) | **92/97 유지** (allow+review) | `eval/run_agentdojo.py` |
 | E2E 롤아웃 (qwen2.5:7b 에이전트 + 가드) | **4/4 시나리오** (1 방어, 2 미시도, 1 정상 OK) | `eval/run_rollout.py` → [결과](eval/rollout_results.md) |
 
 놓친 2건은 문장만으로 정상 요청과 구분 불가한 캘린더 인젝션입니다 (출처 태깅이
-정식 대응). 오탐 24건은 대개 영어 프롬프트로, 모델이 한국어 위주로 튜닝된 탓입니다.
+정식 대응). 남은 오탐 5건은 대개 영어 프롬프트로, 모델이 한국어 위주로 튜닝된 탓입니다
+(차단에 risk 합의를 요구한 뒤 24건에서 감소).
 자세히는 [eval/](eval/) 참조.
 
 ## 텔레메트리 (계측된 도그푸딩)
@@ -103,7 +104,7 @@ laya-guard stats   # 판정 분포, block/review율, 상위 정책, 지연시간
 | 완전 로컬·무료 | ✅ 온디바이스 | ✅ 온디바이스 | ❌ OpenAI+Pinecone 키 필요 | ✅ (HF 모델) | ⚠️ 로컬 또는 OpenAI |
 | 판정 | allow / **review** / block + risk | allow / confirm / block | 이진 판정 | valid + score | 점수 / 임계값 |
 | 한국어 평가 | ✅ 30문항 30/30 | ❌ 확인 불가 | ❌ | ❌ | ❌ |
-| AgentDojo 수치 | ✅ 25/27, 73/97 (심판 레벨, 자체 측정) | ❌ 확인 불가 | ❌ | ❌ | ❌ |
+| AgentDojo 수치 | ✅ 25/27, 92/97 (심판 레벨, 자체 측정) | ❌ 확인 불가 | ❌ | ❌ | ❌ |
 | 상태 | 개발 중, v0.1.0, MIT | MIT | ⚠️ 2025-05 아카이브 | ⚠️ 아카이브, 미유지보수 | 알파, Apache-2.0 |
 
 이 표의 어떤 도구도 제3자 검증 AgentDojo 점수는 없습니다. 우리 수치도 자체 측정·심판
@@ -157,17 +158,10 @@ laya-guard stats   # 판정 분포, block/review율, 상위 정책, 지연시간
   종단간 에이전트 롤아웃이 아닙니다. 롤아웃 하네스는 `eval/run_rollout.py` 참조
   (Ollama + `qwen2.5:7b` 필요).
 
-## 로드맵
-
-- [ ] eval을 통과하는 방식의 정책별 심판 (힌트 덧붙이기는 탐지율 폭락으로 리버트됨)
-- [ ] `/guard` 응답에 판정 출처 필드 (`regex` vs `laya`)
-- [ ] 계측된 도그푸딩용 로컬 판정 로깅 (마스킹 JSONL + 우회율)
-- [ ] 공격 탐지율 유지하며 영어 오탐 24건 줄이기
-- [ ] 종단간 롤아웃 결과의 저장소 내 공개
-
 ## 기여
 
-PR 환영. `python -m pytest tests/ -q`와
+PR 환영. 남은 작업은 [GitHub Issues](https://github.com/scs0209/laya-guard/issues)에 있습니다.
+`python -m pytest tests/ -q`와
 `LAYA_GUARD_MOCK=1 PYTHONPATH=src python eval/run_eval.py --min-acc 1.0`이 통과해야
 합니다 (CI가 둘 다 돌립니다). 실전 모델 검사는 API 키 없이 노트북에서 됩니다.
 

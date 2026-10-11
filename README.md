@@ -73,13 +73,14 @@ fails open (`exit 0`) — see [Limitations](#limitations).
 |---|---|---|
 | Korean 30 (own set) | **30/30** (mock **and** real) | `eval/run_eval.py` |
 | AgentDojo v1, attacks (judge-level) | **25/27 blocked** | `eval/run_agentdojo.py` |
-| AgentDojo v1, benign (judge-level) | **73/97 kept** (allow+review) | `eval/run_agentdojo.py` |
+| AgentDojo v1, benign (judge-level) | **92/97 kept** (allow+review) | `eval/run_agentdojo.py` |
 | E2E rollout (qwen2.5:7b agent + guard) | **4/4 scenarios** (1 defended, 2 not attempted, 1 benign OK) | `eval/run_rollout.py` → [results](eval/rollout_results.md) |
 
 The 2 missed attacks are calendar-event injections indistinguishable from benign
-requests by text alone (source tagging is the intended fix). The 24 overblocked
-benign cases are mostly English prompts — the model is tuned for Korean-heavy
-input. Details in [eval/](eval/).
+requests by text alone (source tagging is the intended fix). The 5 remaining
+overblocked benign cases are mostly English prompts — the model is tuned for
+Korean-heavy input (down from 24 after requiring risk agreement for blocks).
+Details in [eval/](eval/).
 
 ## Telemetry (measured dogfooding)
 
@@ -106,7 +107,7 @@ Most guardrails scan **prompt text**. laya-guard sits one step later: it judges 
 | Fully local & free | ✅ on-device | ✅ on-device | ❌ needs OpenAI+Pinecone keys | ✅ (HF model) | ⚠️ local or OpenAI |
 | Verdict | allow / **review** / block + risk | allow / confirm / block | binary detected | valid + score | scores / thresholds |
 | Korean evaluation | ✅ 30-case set, 30/30 | ❌ none verified | ❌ | ❌ | ❌ |
-| AgentDojo numbers | ✅ 25/27, 73/97 (judge-level, self-reported) | ❌ none verified | ❌ | ❌ | ❌ |
+| AgentDojo numbers | ✅ 25/27, 92/97 (judge-level, self-reported) | ❌ none verified | ❌ | ❌ | ❌ |
 | Status | active, v0.1.0, MIT | MIT | ⚠️ archived May 2025 | ⚠️ archived, unmaintained | alpha, Apache-2.0 |
 
 No verified third-party AgentDojo score exists for any tool in this table —
@@ -161,17 +162,10 @@ All patterns live in [policy.yaml](src/laya_guard/policy.yaml) — edit, add you
   `source=user`), not end-to-end agent rollouts. See `eval/run_rollout.py` for the
   rollout harness (requires Ollama + `qwen2.5:7b`).
 
-## Roadmap
-
-- [ ] Per-policy judging via a mechanism that survives eval (hint-append regressed recall — reverted)
-- [ ] Verdict provenance field (`regex` vs `laya`) in `/guard` responses
-- [ ] Local verdict logging for measured dogfooding (redacted JSONL + override rates)
-- [ ] Cut the 24 English overblocks without losing attack recall
-- [ ] End-to-end rollout results published in-repo
-
 ## Contributing
 
-PRs welcome. `python -m pytest tests/ -q` and
+PRs welcome. Open work is tracked in [GitHub Issues](https://github.com/scs0209/laya-guard/issues).
+`python -m pytest tests/ -q` and
 `LAYA_GUARD_MOCK=1 PYTHONPATH=src python eval/run_eval.py --min-acc 1.0` must pass
 (CI runs both). Real-model checks need no API key — just a laptop.
 

@@ -16,6 +16,10 @@ class Verdict:
     policy_id: str
     reason: str
     mock: bool = False
+    # where the verdict came from: regex = prefilter short-circuit (no model),
+    # model = Laya ran (even if a regex floor later raised the action),
+    # heuristic = mock-mode fallback (no model available).
+    verdict_source: str = "model"
 
 @dataclass
 class Policy:
@@ -159,8 +163,6 @@ def _laya_judge(text: str, hit: Policy | None) -> tuple[str, float]:
         d = _defaults or {}
         if risk >= float(d.get("block_threshold", 0.8)):
             action = "block"
-        elif action == "block":
-            pass  # choice가 block이면 유지 (확신 기반)
         elif action == "review" or risk >= float(d.get("review_threshold", 0.45)):
             action = "review"
         else:
@@ -206,6 +208,10 @@ def judge(tool_call: str, source: str = "user") -> Verdict:
         action = "review"
     if risk >= prof["block"]:
         action = "block"
+    if mock:
+        src_detail = "regex" if (hit is not None and hit.action_on_regex == "block") else "heuristic"
+    else:
+        src_detail = "regex" if (hit is not None and hit.action_on_regex == "block") else "model"
     pid = hit.id if hit else "general"
     # reason 언어: 입력에 한글이 있으면 한국어, 아니면 영어 (API 기본값은 영어권 대응)
     ko = _is_korean(tool_call)
@@ -214,4 +220,5 @@ def judge(tool_call: str, source: str = "user") -> Verdict:
     else:
         reason = ("Laya 심판 결과" if ko else "Judged by Laya") if not mock else \
                  ("정규식+휴리스틱 (MOCK)" if ko else "Regex+heuristics (MOCK)")
-    return Verdict(action=action, risk=risk, policy_id=pid, reason=reason, mock=mock)
+    return Verdict(action=action, risk=risk, policy_id=pid, reason=reason, mock=mock,
+                   verdict_source=src_detail)
