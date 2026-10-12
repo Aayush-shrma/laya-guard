@@ -105,13 +105,18 @@ _RISKY_FLAG = re.compile(
 _SENSITIVE_PATH = re.compile(
     r"\.ssh|\.aws|\.gnupg|\.kube|\.netrc|\.npmrc|\.pypirc|\.env\b|\.git-credentials"
     r"|id_rsa|id_ed25519|credentials|/etc/(shadow|sudoers)", re.IGNORECASE)
+# Without an RRN keyword nearby the secrets-leak regex stays silent, so these numbers
+# skip the safe lane and are reviewed by the heuristics instead.
+_RRN_SHAPE = re.compile(
+    r"(?<![0-9A-Za-z_])[0-9]{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12][0-9]|3[01])-[1-8][0-9]{6}"
+    r"(?![0-9A-Za-z_])")
 
 def _safe_command(text: str) -> bool:
     _ensure()
     assert _safe is not None
     text = text.strip()
     if (not text or _SHELL_META.search(text) or _RISKY_FLAG.search(text)
-            or _SENSITIVE_PATH.search(text)):
+            or _SENSITIVE_PATH.search(text) or _RRN_SHAPE.search(text)):
         return False
     cmd = " ".join(text.split())
     return any(rx.fullmatch(cmd) for rx in _safe)
@@ -126,7 +131,8 @@ def _mock_score(text: str, hit: Policy | None) -> tuple[str, float]:
         if any(h in text for h in _READONLY_HINTS) and not any(w in text for w in _WRITE_HINTS):
             return "allow", 0.1
         suspicious = ["결제", "송금", "환불", "refund", "sudo", "삭제", "drop", "curl", "rm ", "인증"]
-        if any(k in text or k in t for k in suspicious) or _SENSITIVE_PATH.search(text):
+        if (any(k in text or k in t for k in suspicious) or _SENSITIVE_PATH.search(text)
+                or _RRN_SHAPE.search(text)):
             return "review", 0.55
         return "allow", 0.1
     if hit.action_on_regex == "block":

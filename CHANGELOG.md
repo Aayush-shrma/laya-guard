@@ -41,6 +41,16 @@ All notable changes to this project are documented here. Versions follow
   behavior. Non-interactive runs (`claude -p`) have nobody to answer, so Claude Code
   denies the `ask` there; use `LAYA_GUARD_REVIEW=pass` for unattended runs.
 
+### Fixed
+
+- The resident registration number pattern in `secrets-leak` matched any
+  `123456-1234567`-shaped number (file names, timestamps, IDs) and blocked it
+  without the model. A date-stamped name like `backup-240101-1200000.tar` has the
+  same shape as a real number, so the regex now blocks only when an RRN keyword
+  (`주민`, `rrn`, `ssn`, `jumin`, `resident reg…`) is on the same line. A bare
+  RRN-shaped number goes to the model instead: it no longer qualifies for the
+  safe-command lane, and the MOCK/fallback heuristics review it.
+
 ## [0.2.4] - 2026-10-12
 
 ### Security
