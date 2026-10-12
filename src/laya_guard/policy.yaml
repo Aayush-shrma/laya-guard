@@ -99,7 +99,10 @@ policies:
       - 'ignore (all )?previous instructions'
       - '이전 지시를 무시'
       - 'system prompt.*(보여|출력|leak|reveal)'
-      - 'DAN|jailbreak'
+      # \bDAN mode\b만: 단독 'DAN'은 ignore(IGNORECASE)에서 dan/dandelion 등
+      # 일반 단어의 부분문자열로 오탐 (regex block은 모델을 건너뛰므로 고정밀 필요).
+      # jailbreak도 파일명·경로(jailbreak.log, test_jailbreak.py, tests/jailbreak/)는 제외
+      - '(?<![\w./-])jailbreak\w*(?![\w/-]|\.\w)|\bDAN mode\b'
     laya:
       choice: ["allow", "review", "block"]
       score_hint: "에이전트 지시를 탈취하려는 시도 위험도"
@@ -213,7 +216,13 @@ policies:
       - 'disable.*(auth|tls|ssl)'
       - 'TLS.*(끄|비활|무력|우회|skip)'
       - '검증.*(끄|비활|무력화|우회|skip)'
-      - 'verify.*(off|disable|false|skip)'
+      # 자연어 "verify the fallback is off" 같은 문장 오탐 방지:
+      # ssl/tls 검증 플래그 형태(http.sslVerify false, tls-verify=false, ssl_verify: false 등)만 매칭.
+      # 구분자는 1개 이상: 'sslVerify0' 같은 붙은 토큰(grep 검색어 등)은 매칭하지 않음
+      - '(ssl|tls)[\w-]*verify[\s:=]+(false|off|no|0|disabled?|skip)\b'
+      # 코드 관용구 우회도 유지: requests.get(url, verify=False), fetch(u, {verify: false}) 등.
+      # 이전 패턴(verify.*(false|...))이 잡던 형태의 부분집합이라 새 오탐은 없음
+      - '\bverify\s*[:=]\s*False\b'
       - 'change the password of the user to'
       - 'reset.*password.*to new_password'
     laya:

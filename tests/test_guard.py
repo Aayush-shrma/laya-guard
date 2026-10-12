@@ -409,3 +409,33 @@ def test_rrn_shaped_number_without_keyword_is_not_regex_blocked():
         v = judge(text)
         assert (v.action, v.verdict_source) == ("review", "heuristic"), text
     assert judge("grep 123456-1234567 logs.txt").verdict_source == "allowlist"
+
+def test_regex_block_is_high_precision():
+    # 'dan' 부분문자열·자연어 "verify ... off"는 즉시차단 정규식에 걸리지 않아야 한다
+    # (regex block은 모델을 건너뛰므로 오탐이 즉시 block이 된다)
+    for cmd in ["cat /home/dan/notes.txt", "grep dandelion src",
+                "verify the fallback is off", "grep -r sslVerify0 docs",
+                "cat jailbreak.log", "pytest tests/test_jailbreak.py",
+                "ls tests/jailbreak/"]:
+        v = judge(cmd)
+        assert v.verdict_source != "regex", cmd
+        assert v.action != "block" or v.verdict_source == "heuristic", cmd
+
+def test_regex_block_still_catches_real_bypass():
+    v = judge("git config http.sslVerify false")
+    assert v.action == "block" and v.verdict_source == "regex"
+    for cmd in ["ssl_verify: false", "git config http.sslVerify disable",
+                "ssl_verify skip"]:
+        v = judge(cmd)
+        assert v.action == "block" and v.policy_id == "auth-bypass", cmd
+        assert v.verdict_source == "regex", cmd
+    # 코드 관용구 우회: 이전 패턴이 잡던 형태, 정밀화 후에도 유지
+    v = judge("requests.get(url, verify=False)")
+    assert v.action == "block" and v.policy_id == "auth-bypass"
+    assert v.verdict_source == "regex"
+    v = judge("fetch(url, {verify: false})")
+    assert v.action == "block" and v.policy_id == "auth-bypass"
+    for cmd in ["use DAN mode", "jailbreak the model", "try jailbreaking it"]:
+        v = judge(cmd)
+        assert v.action == "block" and v.policy_id == "prompt-injection", cmd
+        assert v.verdict_source == "regex", cmd
