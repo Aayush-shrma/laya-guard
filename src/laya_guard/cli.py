@@ -48,129 +48,6 @@ def cmd_stats(args):
         print(f"  {p['policy_id']}: {p['count']}")
     return 0
 
-def _short(path) -> str:
-    from pathlib import Path
-    home = str(Path.home())
-    s = str(path)
-    return "~" + s[len(home):] if s.startswith(home + os.sep) else s
-
-def _prepare(args):
-    """(install module, Settings) for the agent/scope in args; raises InstallError."""
-    from pathlib import Path
-    from . import install as ins
-    if args.agent not in ins.AGENTS:
-        raise ins.InstallError(f"unsupported agent {args.agent!r}; supported: {', '.join(ins.AGENTS)}")
-    if sys.platform == "win32":
-        raise ins.InstallError("the hook is a bash script, so Windows isn't supported yet")
-    path = ins.settings_path(args.scope, Path.home(), Path(args.project_dir).resolve())
-    return ins, ins.load_settings(path)
-
-def _apply(ins, settings, new_data, args) -> tuple[int, bool]:
-    """Show the diff and, once confirmed, write it. Returns (exit code, wrote)."""
-    if new_data == settings.data:
-        print("Nothing to change.")
-        return 0, False
-    new_text = settings.render(new_data)
-    print(ins.unified_diff(settings, new_text))
-    if args.dry_run:
-        print("\n(dry run: nothing was written)")
-        return 0, False
-    if not args.yes:
-        if not sys.stdin.isatty():
-            print("\nNot applied: stdin isn't a terminal, pass --yes to confirm.", file=sys.stderr)
-            return 2, False
-        if input("\nApply this change? [y/N] ").strip().lower() not in ("y", "yes"):
-            print("Cancelled.")
-            return 1, False
-    backup = ins.write_settings(settings, new_text)
-    print(f"\nWrote {_short(settings.path)}" + (f" (backup: {_short(backup)})" if backup else ""))
-    return 0, True
-
-def cmd_install(args):
-    try:
-        ins, settings = _prepare(args)
-        command = ins.hook_command(ins.cli_path(args.bin), ins.hook_script())
-        data, outcome = ins.plan_install(settings, command, args.matcher, args.force)
-    except InstallError as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 1
-    if outcome == "unchanged":
-        print(f"Already installed and up to date in {_short(settings.path)}.")
-        return 0
-    if outcome == "manual":
-        existing = ins.find_entries(settings.data)[0][2]["command"]
-        print(f"{_short(settings.path)} already runs guard-hook.sh, but not through `laya-guard install`:\n"
-              f"  {existing}\nLeft as it is. Re-run with --force to replace it.")
-        return 0
-    verb = "Adding" if outcome == "added" else "Updating"
-    print(f"{verb} the laya-guard hook ({args.scope} scope, matcher {args.matcher!r}) in {_short(settings.path)}:\n")
-    code, wrote = _apply(ins, settings, data, args)
-    if code or not wrote:
-        return code
-    if not ins.server_health():
-        print("\nThe laya-guard server isn't running, so the hook uses the offline check (regexes only) "
-              "until you start it: `laya-guard serve`.")
-    if args.no_verify:
-        return 0
-    print("\nChecking the hook:")
-    failed = False
-    for label, expected, got in ins.run_probes(command):
-        print(f"  {'ok  ' if got == expected else 'FAIL'} {label} (exit {got}, expected {expected})")
-        failed = failed or got != expected
-    if failed:
-        print("\nThe hook is registered but didn't behave as expected; run `laya-guard status --check`.", file=sys.stderr)
-        return 1
-    return 0
-
-def cmd_uninstall(args):
-    try:
-        ins, settings = _prepare(args)
-        data, removed, left = ins.plan_uninstall(settings, args.force)
-    except InstallError as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 1
-    if not removed:
-        extra = " A hand-written guard-hook.sh entry is left alone; use --force to remove it too." if left else ""
-        print(f"No hook written by `laya-guard install` found in {_short(settings.path)}.{extra}")
-        return 0
-    print(f"Removing the laya-guard hook from {_short(settings.path)}:\n")
-    code, _ = _apply(ins, settings, data, args)
-    if code == 0 and left:
-        print(f"{left} hand-written guard-hook.sh entr{'y' if left == 1 else 'ies'} left in place (use --force).")
-    return code
-
-def cmd_status(args):
-    import json
-    from pathlib import Path
-    from . import install as ins
-    scopes = [args.scope] if args.scope else list(ins.SCOPES)
-    rows = [ins.status(s, Path.home(), Path(args.project_dir).resolve()) for s in scopes]
-    up = ins.server_health()
-    probes = None
-    if args.check:
-        active = next((r for r in rows if r.state in ("installed", "manual")), None)
-        probes = ins.run_probes(active.command) if active else []
-    if args.json:
-        print(json.dumps({
-            "server": up,
-            "claude-code": [{"scope": r.scope, "path": str(r.path), "state": r.state, "command": r.command,
-                             "detail": r.detail} for r in rows],
-            **({"probes": [{"label": l, "expected": e, "exit": g, "ok": e == g} for l, e, g in probes]}
-               if probes is not None else {})}, indent=1))
-        return 0 if all(e == g for _, e, g in (probes or [])) else 1
-    print("claude-code")
-    width = max(len(_short(r.path)) for r in rows) + 2
-    for r in rows:
-        label = {"installed": "installed", "manual": "installed by hand", "broken": "BROKEN",
-                 "invalid": "invalid file", "not-installed": "not installed"}[r.state]
-        print(f"  {r.scope:<8}{_short(r.path):<{width}}{label}" + (f"  ({r.detail})" if r.detail else ""))
-    print(f"server: {'running' if up else 'not running; the hook uses the offline check (regexes only)'}")
-    if probes is not None:
-        print("probes:" if probes else "probes: nothing installed to check")
-        for label, expected, got in probes:
-            print(f"  {'ok  ' if got == expected else 'FAIL'} {label} (exit {got}, expected {expected})")
-    return 0 if all(e == g for _, e, g in (probes or [])) else 1
-
 def _server_up(host: str, port: int) -> bool:
     import urllib.request
     try:
@@ -199,6 +76,168 @@ def cmd_dashboard(args):
     print(f"laya-guard is not running; starting it. dashboard: {url}", flush=True)
     return cmd_serve(args)
 
+def _short(path) -> str:
+    from pathlib import Path
+    home = str(Path.home())
+    s = str(path)
+    return "~" + s[len(home):] if s.startswith(home + os.sep) else s
+
+def _plan(args, action):
+    """The planned change for the agent/scope in args (writes nothing); raises InstallError."""
+    from pathlib import Path
+    from . import install as ins
+    args.agent = ins.spec_for(args.agent).id            # accept `gemini`, `copilot`, ... too
+    return ins, ins.make_plan(action, args.agent, args.scope, Path.home(), Path(args.project_dir).resolve(),
+                              bin_override=getattr(args, "bin", None), matcher=getattr(args, "matcher", None),
+                              force=args.force)
+
+def _apply(ins, plan, args) -> tuple[int, bool]:
+    """Show the diff and, once confirmed, write it. Returns (exit code, wrote)."""
+    if not plan.changed:
+        print("Nothing to change.")
+        return 0, False
+    if plan.repaired:
+        print("Note: the file has trailing commas. The agent accepts them, strict JSON doesn't, and they are "
+              "dropped when it is rewritten.\n")
+    for note in plan.notes:
+        print(f"Note: {note}\n")
+    print(plan.diff)
+    if args.dry_run:
+        print("\n(dry run: nothing was written)")
+        return 0, False
+    if not args.yes:
+        if not sys.stdin.isatty():
+            print("\nNot applied: stdin isn't a terminal, pass --yes to confirm.", file=sys.stderr)
+            return 2, False
+        if input("\nApply this change? [y/N] ").strip().lower() not in ("y", "yes"):
+            print("Cancelled.")
+            return 1, False
+    backups, _ = ins.apply_plan(plan, verify=False)
+    for a in (a for a in plan.artifacts if a.changed):
+        print(f"\n{'Removed' if a.after is None else 'Wrote'} {_short(a.path)}")
+    for b in backups:
+        print(f"  backup: {_short(b)}")
+    return 0, True
+
+_ANSWERS = {0: "allow", 1: "ask", 2: "deny", 9: "unreadable output"}
+
+def _probe_line(agent, label, expected, got) -> str:
+    ok = "ok  " if got == expected else "FAIL"
+    if agent == "claude-code":
+        return f"  {ok} {label} (exit {got}, expected {expected})"
+    return f"  {ok} {label} (answered {_ANSWERS.get(got, f'exit {got}')}, expected {_ANSWERS.get(expected, expected)})"
+
+def cmd_install(args):
+    try:
+        ins, plan = _plan(args, "install")
+    except InstallError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    spec = plan.spec
+    if plan.outcome == "unchanged":
+        print(f"Already installed and up to date in {_short(plan.path)}.")
+        return 0
+    if plan.outcome == "manual":
+        print(f"{_short(plan.path)} already has a laya-guard hook, but not through `laya-guard install`:\n"
+              f"  {plan.existing}\nLeft as it is. Re-run with --force to replace it.")
+        return 0
+    verb = "Adding" if plan.outcome == "added" else "Updating"
+    how = f", matcher {(args.matcher or spec.matcher)!r}" if spec.grouped and spec.id == "claude-code" else ""
+    print(f"{verb} the laya-guard hook for {spec.name} ({args.scope} scope{how}) in {_short(plan.path)}:\n")
+    if spec.unverified:
+        print(f"(Heads-up: this format is {spec.unverified}; it hasn't been run against the app itself.)\n")
+    code, wrote = _apply(ins, plan, args)
+    if code or not wrote:
+        return code
+    if not ins.server_health():
+        print("\nThe laya-guard server isn't running, so the hook uses the offline check (regexes only) "
+              "until you start it: `laya-guard serve`.")
+    failed = False
+    if not args.no_verify:
+        probes = ins.run_probes(plan.command, args.agent)
+        if probes:
+            print("\nChecking the hook:")
+            for label, expected, got in probes:
+                print(_probe_line(args.agent, label, expected, got))
+                failed = failed or got != expected
+        else:
+            print(f"\nNo test calls: {spec.name} loads this by itself, so laya-guard can't run it from here.")
+    print(f"\nNext: {plan.follow_up}")
+    if failed:
+        print("\nThe hook is registered but didn't behave as expected; run `laya-guard status --check`.", file=sys.stderr)
+        return 1
+    return 0
+
+def cmd_uninstall(args):
+    try:
+        ins, plan = _plan(args, "uninstall")
+    except InstallError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    if plan.outcome != "removed":
+        extra = " A hand-written laya-guard entry is left alone; use --force to remove it too." if plan.left else ""
+        print(f"No hook written by `laya-guard install` found in {_short(plan.path)}.{extra}")
+        return 0
+    print(f"Removing the laya-guard hook for {plan.spec.name} from {_short(plan.path)}:\n")
+    code, _ = _apply(ins, plan, args)
+    if code == 0 and plan.left:
+        print(f"{plan.left} hand-written laya-guard entr{'y' if plan.left == 1 else 'ies'} left in place (use --force).")
+    return code
+
+def cmd_status(args):
+    import json
+    from pathlib import Path
+    from . import install as ins
+    home, project = Path.home(), Path(args.project_dir).resolve()
+    names = [args.agent] if args.agent else list(ins.AGENTS)
+    try:
+        agents = [ins.spec_for(n).id for n in names]
+    except InstallError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    report = {a: [ins.status(s, home, project, a) for s in ([args.scope] if args.scope else ins.SPECS[a].scopes)
+                  if s in ins.SPECS[a].scopes] for a in agents}
+    up = ins.server_health()
+    probes = None
+    if args.check:
+        probes = []
+        for agent, rows in report.items():
+            active = next((r for r in rows if r.state in ("installed", "manual") and r.command), None)
+            if active:
+                probes += [(agent, *probe) for probe in ins.run_probes(active.command, agent)]
+    ok = all(e == g for _, _, e, g in (probes or []))
+    if args.json:
+        print(json.dumps({
+            "server": up,
+            **{agent: [{"scope": r.scope, "path": str(r.path), "state": r.state, "command": r.command,
+                        "detail": r.detail} for r in rows] for agent, rows in report.items()},
+            **({"probes": [{"agent": a, "label": l, "expected": e, "exit": g, "ok": e == g} for a, l, e, g in probes]}
+               if probes is not None else {})}, indent=1))
+        return 0 if ok else 1
+    present = {d["id"] for d in ins.detect_agents(home) if d["found"]}
+    quiet = []
+    for agent, rows in report.items():
+        if not args.agent and not args.all and agent not in present and all(r.state == "not-installed" for r in rows):
+            quiet.append(agent)                      # not here and nothing installed: don't list eleven agents
+            continue
+        print(agent)
+        if not rows:
+            print(f"  (no {args.scope} scope)")
+            continue
+        width = max(len(_short(r.path)) for r in rows) + 2
+        for r in rows:
+            label = {"installed": "installed", "manual": "installed by hand", "broken": "BROKEN",
+                     "invalid": "invalid file", "not-installed": "not installed"}[r.state]
+            print(f"  {r.scope:<8}{_short(r.path):<{width}}{label}" + (f"  ({r.detail})" if r.detail else ""))
+    if quiet:
+        print(f"not found on this machine: {', '.join(quiet)} (`laya-guard status --all` lists them too)")
+    print(f"server: {'running' if up else 'not running; the hook uses the offline check (regexes only)'}")
+    if probes is not None:
+        print("probes:" if probes else "probes: nothing installed that laya-guard can run from here")
+        for agent, label, expected, got in probes:
+            print(_probe_line(agent, label, expected, got))
+    return 0 if ok else 1
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="laya-guard")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -214,39 +253,42 @@ def main(argv=None):
     s = sub.add_parser("serve"); s.add_argument("--host", default="127.0.0.1"); s.add_argument("--port", type=int, default=8787)
     s.add_argument("--no-warmup", action="store_true", help="skip loading the model before listening"); s.set_defaults(fn=cmd_serve)
     t = sub.add_parser("stats"); t.add_argument("--path", default=None); t.add_argument("--json", action="store_true"); t.set_defaults(fn=cmd_stats)
-    def _scope_args(p, default):
-        p.add_argument("--scope", choices=("user", "project", "local"), default=default,
-                       help="user: ~/.claude/settings.json; project: ./.claude/settings.json; "
-                            "local: ./.claude/settings.local.json")
-        p.add_argument("--project-dir", default=".", help="project for the project/local scopes (default: current directory)")
-    i = sub.add_parser("install", help="register the laya-guard hook in a coding agent (shows a diff first)")
-    i.add_argument("agent", help="claude-code")
-    _scope_args(i, "user")
-    i.add_argument("--matcher", default="Bash", help="tools the hook guards, a Claude Code matcher (default: Bash)")
-    i.add_argument("--bin", default=None, help="absolute path of the laya-guard executable (default: found automatically)")
-    i.add_argument("--dry-run", action="store_true", help="print the diff, write nothing")
-    i.add_argument("-y", "--yes", action="store_true", help="apply without asking")
-    i.add_argument("--force", action="store_true", help="also replace a hand-written guard-hook.sh entry")
-    i.add_argument("--no-verify", action="store_true", help="skip the test calls after installing")
-    i.set_defaults(fn=cmd_install)
-    u = sub.add_parser("uninstall", help="remove the hook that `laya-guard install` added")
-    u.add_argument("agent", help="claude-code")
-    _scope_args(u, "user")
-    u.add_argument("--dry-run", action="store_true", help="print the diff, write nothing")
-    u.add_argument("-y", "--yes", action="store_true", help="apply without asking")
-    u.add_argument("--force", action="store_true", help="also remove a hand-written guard-hook.sh entry")
-    u.set_defaults(fn=cmd_uninstall)
-    st = sub.add_parser("status", help="where the hook is installed, whether the server is up")
-    _scope_args(st, None)
-    st.add_argument("--check", action="store_true", help="also run two test calls through the installed hook")
-    st.add_argument("--json", action="store_true")
-    st.set_defaults(fn=cmd_status)
-
     d = sub.add_parser("dashboard", help="open the local dashboard (starts the server if it isn't running)")
     d.add_argument("--host", default="127.0.0.1"); d.add_argument("--port", type=int, default=8787)
     d.add_argument("--no-open", action="store_true", help="print the URL instead of opening a browser")
     d.add_argument("--no-warmup", action="store_true", help="skip loading the model when starting the server")
     d.set_defaults(fn=cmd_dashboard)
+    def _scope_args(p, default):
+        p.add_argument("--scope", choices=("user", "project", "local"), default=default,
+                       help="user: the agent's own config in your home directory; project: the one inside the "
+                            "project (see --project-dir); local: Claude Code's settings.local.json only")
+        p.add_argument("--project-dir", default=".", help="project for the project/local scopes (default: current directory)")
+    i = sub.add_parser("install", help="register the laya-guard hook in a coding agent (shows a diff first)")
+    i.add_argument("agent", help="claude-code, codex, cursor, gemini-cli, qwen-code, windsurf, copilot-cli, "
+                                 "cline, opencode, kilo or amp (gemini, qwen, copilot and claude work too)")
+    _scope_args(i, "user")
+    i.add_argument("--matcher", default=None, help="Claude Code only: the tools the hook guards (default: Bash). "
+                                                   "The other agents' hooks always guard shell commands")
+    i.add_argument("--bin", default=None, help="absolute path of the laya-guard executable (default: found automatically)")
+    i.add_argument("--dry-run", action="store_true", help="print the diff, write nothing")
+    i.add_argument("-y", "--yes", action="store_true", help="apply without asking")
+    i.add_argument("--force", action="store_true", help="also replace a hand-written laya-guard hook entry")
+    i.add_argument("--no-verify", action="store_true", help="skip the test calls after installing")
+    i.set_defaults(fn=cmd_install)
+    u = sub.add_parser("uninstall", help="remove the hook that `laya-guard install` added")
+    u.add_argument("agent", help="the agent to remove the hook from (same names as install)")
+    _scope_args(u, "user")
+    u.add_argument("--dry-run", action="store_true", help="print the diff, write nothing")
+    u.add_argument("-y", "--yes", action="store_true", help="apply without asking")
+    u.add_argument("--force", action="store_true", help="also remove a hand-written laya-guard hook entry")
+    u.set_defaults(fn=cmd_uninstall)
+    st = sub.add_parser("status", help="where the hook is installed, whether the server is up")
+    _scope_args(st, None)
+    st.add_argument("--agent", default=None, help="only this agent (default: the ones found on this machine)")
+    st.add_argument("--all", action="store_true", help="list every supported agent, including the ones not found here")
+    st.add_argument("--check", action="store_true", help="also run two test calls through the installed hook")
+    st.add_argument("--json", action="store_true")
+    st.set_defaults(fn=cmd_status)
     args = ap.parse_args(argv)
     return args.fn(args)
 

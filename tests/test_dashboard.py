@@ -197,6 +197,191 @@ def test_api_stats_reports_when_logging_is_off(client, monkeypatch):
     assert client.get("/api/stats").json()["health"]["logging"] is False
 
 
+# --- installing the hook from the dashboard -----------------------------------------------------
+
+def test_origin_and_token_checks():
+    ok = dashboard.origin_allowed
+    assert ok("http://127.0.0.1:8787", "127.0.0.1:8787") and ok("http://localhost:8787", "localhost:8787")
+    assert ok("http://[::1]:8787", "[::1]:8787")
+    for origin, host in [(None, "127.0.0.1:8787"), ("", "127.0.0.1:8787"), ("null", "127.0.0.1:8787"),
+                         ("http://evil.example", "127.0.0.1:8787"), ("http://127.0.0.1:9999", "127.0.0.1:8787"),
+                         ("https://127.0.0.1:8787", "127.0.0.1:8787"), ("http://127.0.0.1:8787", "evil.example:8787"),
+                         ("http://localhost:8787", "127.0.0.1:8787")]:
+        assert not ok(origin, host), (origin, host)
+    assert dashboard.token_ok("abc", "abc")
+    assert not dashboard.token_ok("abd", "abc") and not dashboard.token_ok(None, "abc") and not dashboard.token_ok("", "")
+
+
+def test_page_carries_the_token_placeholder():
+    html = dashboard.render_page("N0NC3", "T0K3N")
+    assert "{{TOKEN}}" not in html and 'name="laya-token" content="T0K3N"' in html
+
+
+@pytest.fixture
+def agents(client, tmp_path, monkeypatch):
+    """The dashboard client with HOME in a temp dir and a stand-in laya-guard executable."""
+    from laya_guard import install
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)          # CI runners set it; plugin paths must stay under HOME
+    stub = tmp_path / "laya-guard"
+    stub.write_text(f'#!/bin/sh\nPYTHONPATH="{Path(__file__).resolve().parent.parent / "src"}" '
+                    f'exec "{sys.executable}" -m laya_guard.cli "$@"\n')
+    stub.chmod(0o755)
+    monkeypatch.setattr(install, "cli_path", lambda override=None: stub)
+    monkeypatch.setattr(install, "_search_dirs", lambda h: [tmp_path / "no-bin"])     # don't see this machine's agents
+    monkeypatch.setattr(install, "_app_dirs", lambda h: [])
+    page = client.get("/dashboard")
+    token = re.search(r'name="laya-token" content="([^"]+)"', page.text).group(1)
+    settings = home / ".claude" / "settings.json"
+
+    def post(action, body, agent="claude-code", **kw):
+        headers = {"Content-Type": "application/json", "Origin": "http://127.0.0.1:8787", "X-Laya-Token": token}
+        headers.update(kw.get("headers", {}))
+        headers = {k: v for k, v in headers.items() if v is not None}
+        return client.post(f"/api/agents/{agent}/{action}", content=json.dumps(body), headers=headers)
+
+    return type("Agents", (), {"client": client, "post": staticmethod(post), "settings": settings, "home": home, "token": token})
+
+
+def test_agents_status_is_readable_and_reports_not_installed(agents):
+    r = agents.client.get("/api/agents")
+    assert r.status_code == 200
+    a = r.json()["agents"][0]
+    assert (a["id"], a["name"], a["scope"], a["state"]) == ("claude-code", "Claude Code", "user", "not-installed")
+    assert a["path"].endswith(".claude/settings.json") and a["path"].startswith("~")
+    assert agents.client.get("/api/agents", headers={"host": "evil.example:8787"}).status_code == 403
+
+
+def test_agents_api_lists_every_supported_agent_and_whether_it_was_found(agents):
+    (agents.home / ".codex").mkdir()
+    (agents.home / ".cursor").mkdir()
+    rows = agents.client.get("/api/agents").json()["agents"]
+    assert [r["id"] for r in rows] == ["claude-code", "codex", "cursor", "gemini-cli", "qwen-code", "windsurf",
+                                       "copilot-cli", "cline", "opencode", "kilo", "amp"]
+    by_id = {r["id"]: r for r in rows}
+    assert all(r["supported"] and r["state"] == "not-installed" for r in rows)
+    assert [r["id"] for r in rows if r["found"]] == ["codex", "cursor"]            # only what exists in this HOME
+    assert by_id["codex"]["how"] == "config" and by_id["codex"]["via"] == ["~/.codex"]
+    assert by_id["cursor"]["path"] == "~/.cursor/hooks.json" and by_id["codex"]["path"] == "~/.codex/hooks.json"
+    assert by_id["opencode"]["path"] == "~/.config/opencode/plugins/laya-guard.ts"
+    assert by_id["codex"]["follow_up"] and by_id["cline"]["follow_up"] and by_id["amp"]["probes"] is False
+    assert by_id["cursor"]["probes"] is True
+    assert str(agents.home) not in json.dumps(rows)                              # only ~/ paths, never the full home
+    assert agents.post("install", {"mode": "preview"}, agent="not-an-agent").status_code == 404
+
+
+# what another tool leaves in a real ~/.cursor/hooks.json, trailing commas included
+CURSOR_FILE = ('{\n  "hooks": {\n    "beforeShellExecution": [\n      {"command": "/bin/sh /x/cursor-hook.sh", "timeout": 10}\n    ],\n'
+               '    "stop": [\n      {"command": "echo stop"},\n    ],\n  },\n  "version": 1\n}\n')
+
+
+def test_cursor_hook_installs_and_uninstalls_through_the_dashboard(agents):
+    path = agents.home / ".cursor" / "hooks.json"
+    path.parent.mkdir()
+    path.write_text(CURSOR_FILE, encoding="utf-8")
+    preview = agents.post("install", {"mode": "preview"}, agent="cursor").json()
+    assert preview["changed"] and preview["outcome"] == "added" and preview["path"] == "~/.cursor/hooks.json"
+    assert any("trailing commas" in n for n in preview["notes"])               # the page tells the user the file is cleaned up
+    assert "guard-cursor-hook.sh" in preview["diff"] and str(agents.home) not in preview["diff"].split("\n@@")[0]
+    assert path.read_text() == CURSOR_FILE                                       # a preview writes nothing
+
+    assert agents.post("install", {"mode": "apply"}, agent="cursor").status_code == 409                  # needs the shown diff
+    done = agents.post("install", {"mode": "apply", "diff_id": preview["diff_id"]}, agent="cursor").json()
+    assert done["applied"] and done["backup"] and all(p["ok"] for p in done["probes"]) and len(done["probes"]) == 2
+    written = json.loads(path.read_text())
+    commands = [h["command"] for h in written["hooks"]["beforeShellExecution"]]
+    assert commands[0] == "/bin/sh /x/cursor-hook.sh" and "guard-cursor-hook.sh" in commands[1]      # the other tool's hook stays
+    assert written["hooks"]["stop"] == [{"command": "echo stop"}] and written["version"] == 1
+    row = [r for r in agents.client.get("/api/agents").json()["agents"] if r["id"] == "cursor"][0]
+    assert row["state"] == "installed" and row["managed"] is True
+
+    p = agents.post("uninstall", {"mode": "preview"}, agent="cursor").json()
+    agents.post("uninstall", {"mode": "apply", "diff_id": p["diff_id"]}, agent="cursor")
+    after = json.loads(path.read_text())
+    assert [h["command"] for h in after["hooks"]["beforeShellExecution"]] == ["/bin/sh /x/cursor-hook.sh"]
+
+
+def test_changing_settings_needs_every_check(agents):
+    body = {"scope": "user", "mode": "preview"}
+    assert agents.post("install", body).status_code == 200
+    assert agents.post("install", body, headers={"X-Laya-Token": None}).status_code == 403          # no token
+    assert agents.post("install", body, headers={"X-Laya-Token": "wrong"}).status_code == 403
+    assert agents.post("install", body, headers={"Origin": "http://evil.example"}).status_code == 403
+    assert agents.post("install", body, headers={"Origin": None}).status_code == 403                # no Origin
+    assert agents.post("install", body, headers={"Content-Type": "text/plain"}).status_code == 415  # a form-style post
+    assert agents.post("install", body, headers={"host": "evil.example:8787", "Origin": "http://evil.example:8787"}).status_code == 403
+    assert not agents.settings.exists()
+
+
+def test_preview_shows_the_diff_and_writes_nothing(agents):
+    r = agents.post("install", {"mode": "preview"})
+    body = r.json()
+    assert body["changed"] and body["outcome"] == "added" and body["applied"] is False
+    assert "guard-hook.sh" in body["diff"] and body["diff"].count("\n+") > 5 and body["diff_id"]
+    header = body["diff"].split("\n@@")[0]
+    assert "~/.claude/settings.json (after)" in header and str(agents.home) not in header   # the short path, not the full one
+    assert not agents.settings.exists()
+
+
+def test_applying_needs_the_diff_that_was_shown(agents):
+    preview = agents.post("install", {"mode": "preview"}).json()
+    assert agents.post("install", {"mode": "apply"}).status_code == 409                       # no diff id
+    assert agents.post("install", {"mode": "apply", "diff_id": "0" * 16}).status_code == 409   # not the one shown
+    assert not agents.settings.exists()
+    done = agents.post("install", {"mode": "apply", "diff_id": preview["diff_id"]}).json()
+    assert done["applied"] is True and done["backup"] is None
+    assert [p["ok"] for p in done["probes"]] == [True, True]                                   # both test calls behave
+    entry = json.loads(agents.settings.read_text())["hooks"]["PreToolUse"][0]["hooks"][0]
+    assert "LAYA_GUARD_MANAGED=1" in entry["command"]
+    assert agents.client.get("/api/agents").json()["agents"][0]["state"] == "installed"
+    again = agents.post("install", {"mode": "preview"}).json()
+    assert again["changed"] is False and again["diff_id"] is None
+
+
+def test_a_change_made_after_the_preview_is_not_overwritten(agents):
+    agents.settings.parent.mkdir()
+    agents.settings.write_text('{"model": "a"}\n', encoding="utf-8")
+    preview = agents.post("install", {"mode": "preview"}).json()
+    agents.settings.write_text('{"model": "b"}\n', encoding="utf-8")                          # edited meanwhile
+    r = agents.post("install", {"mode": "apply", "diff_id": preview["diff_id"]})
+    assert r.status_code == 409 and "changed since the preview" in r.json()["detail"]
+    assert agents.settings.read_text() == '{"model": "b"}\n'
+
+
+def test_uninstall_through_the_dashboard_restores_the_file_and_backs_up(agents):
+    agents.settings.parent.mkdir()
+    agents.settings.write_text('{"model": "a"}\n', encoding="utf-8")
+    p = agents.post("install", {"mode": "preview"}).json()
+    done = agents.post("install", {"mode": "apply", "diff_id": p["diff_id"]}).json()
+    assert done["backup"] and json.loads(agents.settings.read_text())["model"] == "a"
+    p = agents.post("uninstall", {"mode": "preview"}).json()
+    assert p["outcome"] == "removed"
+    agents.post("uninstall", {"mode": "apply", "diff_id": p["diff_id"]})
+    assert json.loads(agents.settings.read_text()) == {"model": "a"}
+    assert len(list(agents.settings.parent.glob("*.bak"))) == 2
+
+
+def test_a_hand_written_entry_needs_force_and_bad_requests_are_refused(agents):
+    agents.settings.parent.mkdir()
+    manual = {"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "/x/guard-hook.sh"}]}]}}
+    agents.settings.write_text(json.dumps(manual), encoding="utf-8")
+    assert agents.post("install", {"mode": "preview"}).json()["changed"] is False              # left alone
+    forced = agents.post("install", {"mode": "preview", "force": True}).json()
+    assert forced["changed"] is True and forced["outcome"] == "updated"
+    assert agents.post("install", {"scope": "project"}).status_code == 400                   # user scope only
+    assert agents.post("install", {"mode": "dance"}).status_code == 400
+    assert agents.post("frobnicate", {}).status_code == 404
+    r = agents.client.post("/api/agents/not-an-agent/install", content="{}",
+                           headers={"Content-Type": "application/json", "Origin": "http://127.0.0.1:8787",
+                                    "X-Laya-Token": agents.token})
+    assert r.status_code == 404
+    agents.settings.write_text("{nope", encoding="utf-8")
+    assert agents.post("install", {"mode": "preview"}).status_code == 400                     # invalid JSON is refused
+    assert agents.settings.read_text() == "{nope"
+
+
 def test_page_drops_a_response_for_a_window_that_is_no_longer_selected():
     # a slow 24h poll must not overwrite the page after the user pressed 1 for the last hour
     html = dashboard.render_page("N0NC3")
