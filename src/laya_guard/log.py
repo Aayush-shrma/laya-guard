@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -29,6 +30,16 @@ def log_path() -> Path:
     return base / "laya-guard" / "verdicts.jsonl"
 
 
+_SCRIPT_REASON = re.compile(r"^(package\.json scripts\.).*: ", re.S)
+
+
+def _public_reason(reason: str) -> str:
+    """The reason as it may be logged. A package.json script finding reads "package.json scripts.<name>: <policy
+    message>" and the name (or a chain of them) comes from the user's own file, so it is dropped here; the verdict
+    the caller gets keeps it. Greedy on purpose: if a message itself held a colon, more is hidden, never less."""
+    return _SCRIPT_REASON.sub("package.json script: ", reason)
+
+
 def log_verdict(
     *,
     action: str,
@@ -39,6 +50,7 @@ def log_verdict(
     source: str,
     latency_ms: float,
     tool_call: str,
+    via: str = "",
 ) -> Path | None:
     """Append one redacted verdict entry. Returns the log path, or None if disabled."""
     if not log_enabled():
@@ -50,13 +62,15 @@ def log_verdict(
         "action": action,
         "risk": risk,
         "policy_id": policy_id,
-        "reason": reason,  # policy message from policy.yaml — no user content
+        "reason": _public_reason(reason),  # policy message from policy.yaml — no user content
         "mock": mock,
         "source": source,
         "latency_ms": round(float(latency_ms), 1),
         "tool_len": len(tool_call),
         "tool_sha": digest,
     }
+    if via:
+        entry["via"] = via  # regex | allowlist | model | heuristic | limit | offline: how the verdict was made
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
@@ -86,7 +100,7 @@ def summarize(entries: list[dict]) -> dict:
     by_action: dict[str, int] = {}
     by_policy: dict[str, int] = {}
     latencies: list[float] = []
-    mocks = 0
+    mocks = offline = model_error = 0
     for e in entries:
         a = str(e.get("action", "?"))
         by_action[a] = by_action.get(a, 0) + 1
@@ -98,6 +112,10 @@ def summarize(entries: list[dict]) -> dict:
             pass
         if e.get("mock"):
             mocks += 1
+        if e.get("via") == "offline":
+            offline += 1            # the server was down or too slow: regexes and the safe list only
+        elif e.get("via") == "heuristic" and not e.get("mock"):
+            model_error += 1        # the server was up but the model failed: heuristics stood in
 
     def rate(n: int) -> float:
         return round(n / total, 3) if total else 0.0
@@ -111,4 +129,7 @@ def summarize(entries: list[dict]) -> dict:
         "top_policies": [{"policy_id": k, "count": v} for k, v in top_policies],
         "avg_latency_ms": round(sum(latencies) / len(latencies), 1) if latencies else 0.0,
         "mock_share": rate(mocks),
+        # calls judged without the model, kept apart from real verdicts: an outage is not a denial
+        "degraded": {"offline": offline, "model_error": model_error, "total": offline + model_error,
+                     "share": rate(offline + model_error)},
     }

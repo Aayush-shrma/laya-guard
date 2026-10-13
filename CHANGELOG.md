@@ -5,8 +5,23 @@ All notable changes to this project are documented here. Versions follow
 
 ## [Unreleased]
 
+### Security
+
+- The verdict log no longer records the names of `package.json` scripts. A script finding's reason read
+  `package.json scripts.<name>: <policy message>`, and the name comes from the user's own file, so it is dropped when
+  the entry is written (the verdict returned to the caller keeps it). Hash and length were always the only things kept
+  of a command; now the reason can't carry command-derived text either. Found by review on #43.
+
 ### Added
 
+- `LAYA_GUARD_FAIL=ask`: with the server down, a call the offline check can't judge (neither regex-flagged nor on the
+  safe list) becomes `review` instead of passing. Agents with an ask lane (Claude Code, Cursor, Qwen Code, Copilot CLI)
+  put it to you, and a headless run denies it, so it is closed when nobody is there. `open` stays the default and
+  `closed` still blocks; known destructive patterns block and safe commands pass in every mode.
+- An outage is recorded as its own kind of event. Every `laya-guard check --offline` (what hooks fall back to) is now
+  appended to the verdict log with `via: "offline"`, the server records how it judged (`via`: `model`, `regex`,
+  `allowlist`, `heuristic`, `limit`), and `laya-guard stats` prints how many calls were judged without the model, with the
+  server down or after a model error. Still hash and length only; mock mode isn't counted.
 - `laya-guard dashboard`: a local dashboard at `http://127.0.0.1:8787/dashboard`
   (starts the server if it isn't running, `--no-open` prints the URL). A small app with a sidebar
   and four views: Overview (a sentence with the verdict counts for a 1h to all-time window, a tape
@@ -58,6 +73,8 @@ All notable changes to this project are documented here. Versions follow
   hook's output isn't. `status` now covers every supported agent.
 
 ### Changed
+- The tests no longer write to the developer's own verdict log: `tests/conftest.py` points `LAYA_GUARD_LOG_PATH` at a
+  temporary file for the whole run.
 
 - Amp now has a real plugin (`integrations/amp/laya-guard.ts`, a `tool.call` handler); the `delegate` helper stays as
   the legacy route. Kilo's plugin default-exports `{ id, server }`, which Kilo's docs require. The Copilot adapter reads
