@@ -463,9 +463,11 @@ laya-guard dashboard   # 같은 내용을 로컬 웹 페이지로 (대시보드 
 ## API
 
 - `GET /health` → `{"ok": true, "mock": false}`
-- `POST /guard` `{tool_call, source?, cwd?}` → `{action, risk, policy_id, reason, mock, verdict_source}`
+- `POST /guard` `{tool_call, source?, cwd?, tool_name?}` → `{action, risk, policy_id, reason, mock, verdict_source}`
   (`source`: `user` | `tool` | `email` | `web`. 비사용자 출처는 임계값 강화.
   `cwd`: 명령이 실행될 절대 경로. 주면 package.json 스크립트 검사가 켜짐.
+  `tool_name`: 에이전트가 호출한 도구 이름(`Bash`, `Edit`, MCP 도구 등). 판정에는 영향 없고 로그에만 남음
+  (평문, 최대 64자, 없으면 `null`). `laya-guard stats`가 도구별로 집계.
   `reason`은 입력에 한글이 있으면 한국어, 아니면 영어로 반환.
   `verdict_source`: `regex`(정규식 선차단, 모델 미호출) |
   `allowlist`(안전 명령, 모델 미호출) | `model` |

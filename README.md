@@ -492,9 +492,11 @@ All patterns live in [policy.yaml](src/laya_guard/policy.yaml) — edit, add you
 ## API
 
 - `GET /health` → `{"ok": true, "mock": false}`
-- `POST /guard` `{tool_call, source?, cwd?}` → `{action, risk, policy_id, reason, mock, verdict_source}`
+- `POST /guard` `{tool_call, source?, cwd?, tool_name?}` → `{action, risk, policy_id, reason, mock, verdict_source}`
   (`source`: `user` | `tool` | `email` | `web`; non-user sources get stricter thresholds.
   `cwd`: absolute directory the command runs in; enables package.json script checks.
+  `tool_name`: the agent's name for the tool being called (`Bash`, `Edit`, an MCP tool, …); it doesn't change the
+  verdict, it is only logged (in clear, up to 64 characters; `null` when absent) and counted by `laya-guard stats`.
   `reason` is Korean when the input contains Hangul, English otherwise.
   `verdict_source`: `regex` (prefilter block, model skipped) |
   `allowlist` (safe command, model skipped) | `model` |

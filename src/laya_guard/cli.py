@@ -74,6 +74,10 @@ def cmd_stats(args):
               f"{d['model_error']} after a model error), {d['share']:.1%} of all")
     for p in s["top_policies"]:
         print(f"  {p['policy_id']}: {p['count']}")
+    if s["by_tool"]:
+        print("top tools:")
+        for t in s["by_tool"]:
+            print(f"  {t['tool_name']}: {t['count']}")
     return 0
 
 def _server_up(host: str, port: int) -> bool:

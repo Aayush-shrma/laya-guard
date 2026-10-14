@@ -5,6 +5,13 @@ All notable changes to this project are documented here. Versions follow
 
 ## [Unreleased]
 
+### Added
+
+- **`POST /guard` accepts an optional `tool_name`** (`Bash`, `Edit`, an MCP tool, …). It is logged in clear as
+  `"tool_name"` in `verdicts.jsonl` (non-printable characters dropped, cut to 64 characters, `null` when absent) and
+  `laya-guard stats` shows the top five tools, so you can tell which tools the blocks come from. The adapters don't
+  send it yet.
+
 ## [0.4.1] - 2026-10-14
 
 The dashboard gets a Simulation view: the pipeline as a small 3D diorama you can watch, an attack lab that judges eight

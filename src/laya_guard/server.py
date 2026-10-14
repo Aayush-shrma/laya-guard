@@ -23,13 +23,14 @@ app = FastAPI(title="laya-guard")
 _WRITE_TOKEN = secrets.token_urlsafe(32)
 
 
-def _judge_and_log(text: str, source: str, cwd: str | None = None):
+def _judge_and_log(text: str, source: str, cwd: str | None = None, tool_name: str | None = None):
     t0 = time.perf_counter()
     v = judge(text, source=source, cwd=cwd)
     log_verdict(
         action=v.action, risk=v.risk, policy_id=v.policy_id, reason=v.reason,
         mock=v.mock, source=source,
         latency_ms=(time.perf_counter() - t0) * 1000.0, tool_call=text, via=v.verdict_source,
+        tool_name=tool_name,
     )
     if v.verdict_source == "heuristic" and not v.mock:
         alerts.maybe_alert("model-error")  # the model failed and heuristics stood in; mock mode is a choice
@@ -40,6 +41,7 @@ class GuardReq(BaseModel):
     state: str = ""
     source: str = "user"  # user | tool | email | web
     cwd: str | None = None  # absolute directory the command runs in (enables package script checks)
+    tool_name: str | None = None  # the agent's name for the tool (Bash, Edit, an MCP tool); logged, not judged
 
 class GuardRes(BaseModel):
     action: str
@@ -57,7 +59,7 @@ def health():
 def guard(req: GuardReq):
     text = req.tool_call or req.state
     cwd = req.cwd if req.cwd and os.path.isabs(req.cwd) else None
-    v = _judge_and_log(text, source=req.source, cwd=cwd)
+    v = _judge_and_log(text, source=req.source, cwd=cwd, tool_name=req.tool_name)
     return GuardRes(action=v.action, risk=v.risk, policy_id=v.policy_id, reason=v.reason,
                     mock=v.mock, verdict_source=v.verdict_source)
 

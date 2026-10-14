@@ -2,6 +2,9 @@ import json
 import os
 import sys
 from pathlib import Path
+
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 from laya_guard import log as lg
 from laya_guard.log import log_verdict, load_entries, summarize
@@ -121,3 +124,45 @@ def test_package_script_names_are_not_logged(tmp_path, monkeypatch):
     reasons = [e["reason"] for e in load_entries(tmp_path / "v.jsonl")]
     assert reasons[:3] == ["package.json script: Downloaded script piped straight into an interpreter"] * 3
     assert reasons[3] == "Downloaded script piped straight into an interpreter"       # other reasons are untouched
+
+
+def test_tool_name_is_logged_in_clear_and_cut_to_64_chars(tmp_path, monkeypatch):
+    _isolate(tmp_path, monkeypatch)
+    for name in ("Bash", None, "", "   ", "mcp__" + "x" * 100, "Bash\n\x1b[31mx", "\n\x1b\t", "\x00" + "y" * 70):
+        log_verdict(action="allow", risk=0.1, policy_id="general", reason="r", mock=True, source="tool",
+                    latency_ms=1.0, tool_call="ls", tool_name=name)
+    names = [e["tool_name"] for e in load_entries(tmp_path / "v.jsonl")]
+    assert names[:4] == ["Bash", None, None, None]                     # absent or blank is logged as null
+    assert names[4] == ("mcp__" + "x" * 100)[:lg.TOOL_NAME_MAX] and len(names[4]) == 64
+    assert names[5] == "Bash[31mx"                                     # no newline / ESC reaches the log or stats
+    assert names[6] is None                                            # only control characters is blank
+    assert names[7] == "y" * 64                                        # dropped before the 64-char cut
+
+
+def test_stats_count_the_top_five_tools(tmp_path, monkeypatch, capsys):
+    from laya_guard import cli
+    rows = ([{"tool_name": "Bash"}] * 4 + [{"tool_name": "Edit"}] * 2 + [{"tool_name": "Write"}]
+            + [{"tool_name": f"mcp__t{i}"} for i in range(4)] + [{"tool_name": None}, {}])
+    s = summarize([{**_entry(), **r} for r in rows])
+    assert s["by_tool"][:2] == [{"tool_name": "Bash", "count": 4}, {"tool_name": "Edit", "count": 2}]
+    assert len(s["by_tool"]) == 5 and all(t["tool_name"] for t in s["by_tool"])   # null / missing isn't a tool
+    assert summarize([_entry()])["by_tool"] == []                      # logs from before tool_name stay valid
+    _isolate(tmp_path, monkeypatch)
+    log_verdict(action="block", risk=0.9, policy_id="p", reason="r", mock=True, source="tool", latency_ms=1.0,
+                tool_call="rm -rf /", tool_name="Bash")
+    assert cli.main(["stats", "--path", str(tmp_path / "v.jsonl")]) == 0
+    assert "top tools:\n  Bash: 1" in capsys.readouterr().out
+
+
+def test_post_guard_logs_the_optional_tool_name(tmp_path, monkeypatch):
+    pytest.importorskip("fastapi")
+    pytest.importorskip("httpx")
+    from fastapi.testclient import TestClient
+    _isolate(tmp_path, monkeypatch)
+    from laya_guard.server import app
+    client = TestClient(app)                                           # "ls" is a safe command: no model needed
+    assert client.post("/guard", json={"tool_call": "ls", "tool_name": "Bash"}).status_code == 200
+    assert client.post("/guard", json={"tool_call": "ls"}).status_code == 200
+    entries = load_entries(tmp_path / "v.jsonl")
+    assert [e["tool_name"] for e in entries] == ["Bash", None]
+    assert all("tool_call" not in e for e in entries)                  # the text itself is still never stored

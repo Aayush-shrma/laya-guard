@@ -40,6 +40,18 @@ def _public_reason(reason: str) -> str:
     return _SCRIPT_REASON.sub("package.json script: ", reason)
 
 
+TOOL_NAME_MAX = 64
+
+
+def _clean_tool_name(tool_name: str | None) -> str | None:
+    """The tool name as it is logged: non-printable characters (newlines, escape sequences' ESC, ...) dropped,
+    then stripped and cut to TOOL_NAME_MAX characters, or None when nothing is left."""
+    if not tool_name:
+        return None
+    name = "".join(ch for ch in tool_name if ch.isprintable()).strip()
+    return name[:TOOL_NAME_MAX] or None
+
+
 def log_verdict(
     *,
     action: str,
@@ -51,8 +63,13 @@ def log_verdict(
     latency_ms: float,
     tool_call: str,
     via: str = "",
+    tool_name: str | None = None,
 ) -> Path | None:
-    """Append one redacted verdict entry. Returns the log path, or None if disabled."""
+    """Append one redacted verdict entry. Returns the log path, or None if disabled.
+
+    ``tool_name`` is the agent's name for the tool that was called (``Bash``, ``Edit``, an MCP tool, ...). It is
+    metadata, not user content, so it is kept in clear, cut to ``TOOL_NAME_MAX`` characters; ``None`` (or blank)
+    is logged as ``null``."""
     if not log_enabled():
         return None
     path = log_path()
@@ -68,6 +85,7 @@ def log_verdict(
         "latency_ms": round(float(latency_ms), 1),
         "tool_len": len(tool_call),
         "tool_sha": digest,
+        "tool_name": _clean_tool_name(tool_name),
     }
     if via:
         entry["via"] = via  # regex | allowlist | model | heuristic | limit | offline: how the verdict was made
@@ -110,6 +128,7 @@ def summarize(entries: list[dict]) -> dict:
     total = len(entries)
     by_action: dict[str, int] = {}
     by_policy: dict[str, int] = {}
+    by_tool: dict[str, int] = {}
     latencies: list[float] = []
     mocks = offline = model_error = 0
     for e in entries:
@@ -117,6 +136,9 @@ def summarize(entries: list[dict]) -> dict:
         by_action[a] = by_action.get(a, 0) + 1
         p = str(e.get("policy_id", "?"))
         by_policy[p] = by_policy.get(p, 0) + 1
+        tool = e.get("tool_name")
+        if tool:  # older entries and callers that don't send one have no tool name; they aren't a tool
+            by_tool[str(tool)] = by_tool.get(str(tool), 0) + 1
         try:
             latencies.append(float(e.get("latency_ms", 0.0)))
         except (TypeError, ValueError):
@@ -131,12 +153,14 @@ def summarize(entries: list[dict]) -> dict:
         return round(n / total, 3) if total else 0.0
 
     top_policies = sorted(by_policy.items(), key=lambda kv: kv[1], reverse=True)[:5]
+    top_tools = sorted(by_tool.items(), key=lambda kv: kv[1], reverse=True)[:5]
     return {
         "total": total,
         "by_action": by_action,
         "block_rate": rate(by_action.get("block", 0)),
         "review_rate": rate(by_action.get("review", 0)),
         "top_policies": [{"policy_id": k, "count": v} for k, v in top_policies],
+        "by_tool": [{"tool_name": k, "count": v} for k, v in top_tools],
         "avg_latency_ms": round(sum(latencies) / len(latencies), 1) if latencies else 0.0,
         "mock_share": rate(mocks),
         # calls judged without the model, kept apart from real verdicts: an outage is not a denial
