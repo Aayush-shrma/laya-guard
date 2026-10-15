@@ -86,7 +86,7 @@ def test_offline_checks_are_logged_without_the_text_and_obey_the_fail_mode(tmp_p
         assert cli.main(["check", "--offline", "--json", secret_call]) == code
         assert json.loads(capsys.readouterr().out)["action"] == action, mode
     entries = load_entries(tmp_path / "v.jsonl")
-    assert all(e["source"] == "user" for e in entries)
+    assert all(e["source"] == "tool" for e in entries)
     assert [(e["via"], e["action"], e["policy_id"]) for e in entries] == [
         ("offline", "review", "offline"),
         ("offline", "allow", "offline"),
