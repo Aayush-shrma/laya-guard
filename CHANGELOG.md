@@ -11,6 +11,8 @@ All notable changes to this project are documented here. Versions follow
   `"tool_name"` in `verdicts.jsonl` (non-printable characters dropped, cut to 64 characters, `null` when absent) and
   `laya-guard stats` shows the top five tools, so you can tell which tools the blocks come from. The adapters don't
   send it yet.
+- **Offline verdict logging:** `laya-guard check --offline` records offline verdicts in `verdicts.jsonl`, and
+  `laya-guard stats` reports `offline_share`.
 
 ## [0.4.1] - 2026-10-14
 

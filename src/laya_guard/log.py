@@ -89,7 +89,6 @@ def log_verdict(
     }
     if via:
         entry["via"] = via  # regex | allowlist | model | heuristic | limit | offline: how the verdict was made
-        entry["verdict_source"] = via
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
@@ -112,14 +111,17 @@ def load_entries(path: Path | str | None = None) -> list[dict]:
             continue
     return entries
 
+
 def degraded_kind(entry: dict) -> str | None:
-    """Identify verdicts made without the model."""
-    verdict_source = entry.get("verdict_source", entry.get("via"))
-    if verdict_source == "offline":
+    """How a call was judged without the model, or None if it wasn't: "offline" (the server was down or too
+    slow: regexes and the safe list only) or "model_error" (the server was up but the model failed: heuristics
+    stood in). Mock mode is a choice, not a failure."""
+    if entry.get("via") == "offline":
         return "offline"
-    if verdict_source == "heuristic" and not entry.get("mock"):
+    if entry.get("via") == "heuristic" and not entry.get("mock"):
         return "model_error"
     return None
+
 
 def summarize(entries: list[dict]) -> dict:
     """Aggregate verdict distribution + latency. Pure function (testable)."""

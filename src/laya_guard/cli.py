@@ -30,7 +30,7 @@ def _log_offline(v, text: str, latency_ms: float) -> None:
     from .log import log_verdict
     try:
         log_verdict(action=v.action, risk=v.risk, policy_id=v.policy_id, reason=v.reason, mock=False,
-                    source="tool", latency_ms=latency_ms, tool_call=text, via="offline")
+                    source="user", latency_ms=latency_ms, tool_call=text, via="offline")
     except OSError:
         pass
     maybe_alert("server-down")             # LAYA_GUARD_ALERT_CMD, once per outage; never raises, never waits

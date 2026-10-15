@@ -66,7 +66,6 @@ def test_the_log_records_how_a_verdict_was_made_and_stats_count_the_outages(tmp_
                     latency_ms=1.0, tool_call="kubectl delete namespace prod", via="offline")
     entry = json.loads(p.read_text())
     assert entry["via"] == "offline"
-    assert entry["verdict_source"] == "offline"
     assert "kubectl" not in p.read_text()
     log_verdict(action="allow", risk=0.1, policy_id="general", reason="r", mock=False, source="user",
                 latency_ms=1.0, tool_call="ls")
@@ -87,7 +86,8 @@ def test_offline_checks_are_logged_without_the_text_and_obey_the_fail_mode(tmp_p
         assert cli.main(["check", "--offline", "--json", secret_call]) == code
         assert json.loads(capsys.readouterr().out)["action"] == action, mode
     entries = load_entries(tmp_path / "v.jsonl")
-    assert [(e["verdict_source"], e["action"], e["policy_id"]) for e in entries] == [
+    assert all(e["source"] == "user" for e in entries)
+    assert [(e["via"], e["action"], e["policy_id"]) for e in entries] == [
         ("offline", "review", "offline"),
         ("offline", "allow", "offline"),
         ("offline", "block", "offline"),
