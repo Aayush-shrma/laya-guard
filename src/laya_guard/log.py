@@ -88,7 +88,8 @@ def log_verdict(
         "tool_name": _clean_tool_name(tool_name),
     }
     if via:
-        entry["verdict_source"] = via  # regex | allowlist | model | heuristic | limit | offline: how the verdict was made
+        # regex | allowlist | model | heuristic | limit | offline: how the verdict was made
+        entry["verdict_source"] = via
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")

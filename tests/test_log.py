@@ -120,7 +120,7 @@ def test_tests_never_write_to_the_real_verdict_log():
 def test_package_script_names_are_not_logged(tmp_path, monkeypatch):
     # a script finding's reason carries the name of a script from the user's own package.json (review finding on #43)
     _isolate(tmp_path, monkeypatch)
-    for key in ("test", "test â†’ customer_alice", "build:prod â†’ deploy-acme-internal"):
+    for key in ("test", "test → customer_alice", "build:prod → deploy-acme-internal"):
         log_verdict(action="block", risk=0.92, policy_id="pipe-to-shell", mock=False, source="tool", latency_ms=1.0,
                     reason=f"package.json scripts.{key}: Downloaded script piped straight into an interpreter",
                     tool_call="npm test")

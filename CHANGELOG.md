@@ -11,7 +11,11 @@ All notable changes to this project are documented here. Versions follow
   `"tool_name"` in `verdicts.jsonl` (non-printable characters dropped, cut to 64 characters, `null` when absent) and
   `laya-guard stats` shows the top five tools, so you can tell which tools the blocks come from. The adapters don't
   send it yet.
-- **Verdict source logging:** The verdict log uses `verdict_source`, matching   the API; older logs using `via` remain supported.
+
+### Changed
+
+- **The verdict log field `via` is now `verdict_source`**, the same name as in the API. Entries written before keep
+  `via` and are still read by the dashboard and `laya-guard stats`.
 
 ## [0.4.1] - 2026-10-14
 
