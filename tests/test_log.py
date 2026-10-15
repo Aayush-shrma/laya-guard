@@ -65,7 +65,8 @@ def test_the_log_records_how_a_verdict_was_made_and_stats_count_the_outages(tmp_
     p = log_verdict(action="allow", risk=0.5, policy_id="offline", reason="r", mock=False, source="tool",
                     latency_ms=1.0, tool_call="kubectl delete namespace prod", via="offline")
     entry = json.loads(p.read_text())
-    assert entry["via"] == "offline"
+    assert entry["verdict_source"] == "offline"
+    assert "via" not in entry
     assert "kubectl" not in p.read_text()
     log_verdict(action="allow", risk=0.1, policy_id="general", reason="r", mock=False, source="user",
                 latency_ms=1.0, tool_call="ls")
@@ -73,7 +74,6 @@ def test_the_log_records_how_a_verdict_was_made_and_stats_count_the_outages(tmp_
     s = summarize([_entry("model"), _entry("regex"), _entry("offline"), _entry("offline"),
                    _entry("heuristic"), _entry("heuristic", mock=True), _entry()])
     assert s["degraded"] == {"offline": 2, "model_error": 1, "total": 3, "share": round(3 / 7, 3)}   # mock isn't an outage
-    assert s["offline_share"] == round(2 / 7, 3)
     assert summarize([])["degraded"]["total"] == 0
 
 
@@ -87,7 +87,7 @@ def test_offline_checks_are_logged_without_the_text_and_obey_the_fail_mode(tmp_p
         assert json.loads(capsys.readouterr().out)["action"] == action, mode
     entries = load_entries(tmp_path / "v.jsonl")
     assert all(e["source"] == "tool" for e in entries)
-    assert [(e["via"], e["action"], e["policy_id"]) for e in entries] == [
+    assert [(e["verdict_source"], e["action"], e["policy_id"]) for e in entries] == [
         ("offline", "review", "offline"),
         ("offline", "allow", "offline"),
         ("offline", "block", "offline"),
@@ -120,7 +120,7 @@ def test_tests_never_write_to_the_real_verdict_log():
 def test_package_script_names_are_not_logged(tmp_path, monkeypatch):
     # a script finding's reason carries the name of a script from the user's own package.json (review finding on #43)
     _isolate(tmp_path, monkeypatch)
-    for key in ("test", "test → customer_alice", "build:prod → deploy-acme-internal"):
+    for key in ("test", "test â†’ customer_alice", "build:prod â†’ deploy-acme-internal"):
         log_verdict(action="block", risk=0.92, policy_id="pipe-to-shell", mock=False, source="tool", latency_ms=1.0,
                     reason=f"package.json scripts.{key}: Downloaded script piped straight into an interpreter",
                     tool_call="npm test")
@@ -173,3 +173,11 @@ def test_post_guard_logs_the_optional_tool_name(tmp_path, monkeypatch):
     entries = load_entries(tmp_path / "v.jsonl")
     assert [e["tool_name"] for e in entries] == ["Bash", None]
     assert all("tool_call" not in e for e in entries)                  # the text itself is still never stored
+
+
+def test_degraded_kind_supports_legacy_via():
+    from laya_guard.log import degraded_kind
+
+    assert degraded_kind({"via": "offline"}) == "offline"
+    assert degraded_kind({"via": "heuristic", "mock": False}) == "model_error"
+    assert degraded_kind({"via": "heuristic", "mock": True}) is None

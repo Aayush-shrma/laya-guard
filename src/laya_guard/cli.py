@@ -66,7 +66,7 @@ def cmd_stats(args):
         return 0
     print(f"verdicts: {s['total']} (log: {args.path or log_path()})")
     print(f"by_action: {s['by_action']}")
-    print(f"block_rate={s['block_rate']} review_rate={s['review_rate']} mock_share={s['mock_share']} offline_share={s['offline_share']}")
+    print(f"block_rate={s['block_rate']} review_rate={s['review_rate']} mock_share={s['mock_share']}")
     print(f"avg_latency_ms={s['avg_latency_ms']}")
     d = s["degraded"]
     if d["total"]:

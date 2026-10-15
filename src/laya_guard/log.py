@@ -88,7 +88,7 @@ def log_verdict(
         "tool_name": _clean_tool_name(tool_name),
     }
     if via:
-        entry["via"] = via  # regex | allowlist | model | heuristic | limit | offline: how the verdict was made
+        entry["verdict_source"] = via  # regex | allowlist | model | heuristic | limit | offline: how the verdict was made
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
@@ -116,9 +116,10 @@ def degraded_kind(entry: dict) -> str | None:
     """How a call was judged without the model, or None if it wasn't: "offline" (the server was down or too
     slow: regexes and the safe list only) or "model_error" (the server was up but the model failed: heuristics
     stood in). Mock mode is a choice, not a failure."""
-    if entry.get("via") == "offline":
+    verdict_source = entry.get("verdict_source") or entry.get("via")
+    if verdict_source == "offline":
         return "offline"
-    if entry.get("via") == "heuristic" and not entry.get("mock"):
+    if verdict_source == "heuristic" and not entry.get("mock"):
         return "model_error"
     return None
 
@@ -163,7 +164,6 @@ def summarize(entries: list[dict]) -> dict:
         "by_tool": [{"tool_name": k, "count": v} for k, v in top_tools],
         "avg_latency_ms": round(sum(latencies) / len(latencies), 1) if latencies else 0.0,
         "mock_share": rate(mocks),
-        "offline_share": rate(offline),
         # calls judged without the model, kept apart from real verdicts: an outage is not a denial
         "degraded": {"offline": offline, "model_error": model_error, "total": offline + model_error,
                      "share": rate(offline + model_error)},
